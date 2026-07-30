@@ -1,0 +1,8 @@
+﻿.doc-engine/
+node_modules/
+*.log
+.DS_Store
+.env
+.env.local
+dist/
+build/
