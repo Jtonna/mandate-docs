@@ -1,4 +1,4 @@
-﻿# MandateDocs
+# MandateDocs
 
 Template-driven documentation system for GitHub repositories. Manage structured documents with AI-assisted validation and human-approval gates.
 
@@ -11,18 +11,31 @@ Template-driven documentation system for GitHub repositories. Manage structured 
 
 ## Development
 
-This project uses SOPs (Standard Operating Procedures) as specification artifacts. See docs/SOP_*.md for development roadmap and implementation status.
+This project uses SOPs (Standard Operating Procedures) and structured design documents as specification artifacts. Development is tracked as discrete items — each can be an SOP (specification), a Task (implementation work), or Setup (infrastructure/tooling). See docs/SOP_*.md and below for roadmap and status.
+
+### How We Work
+
+1. **SOP rough draft** — we discuss and align on the specification (pass/fail)
+2. **Hand off to agent** — Fable 5 or Opus 4.8 reviews, refines, and documents the SOP
+3. **Implementation tasks** — carved from the reviewed SOP
+4. **Technical design review** — once all Phase 1 SOPs are done, an agent creates the initial design document
 
 ## Roadmap
 
-| Phase | Focus | Deliverable | Status |
+| Item | Type | Description | Status |
 |---|---|---|---|
-| **Phase 1** | System specification | Complete dev SOPs defining engine architecture, storage, formatting, sync | inProgress |
-| **Phase 2** | Project init SOP | Implement mandate-docs init flow (scan → parse → build DB) | eadyForImplementation |
-| **Phase 3** | Document create SOP | Implement mandate-docs new and validation | locked |
-| **Phase 4** | Approval workflow SOP | Implement proposal storage, approval flow, file sync | locked |
-| **Phase 5** | Web UI SOP | Dashboard, doc browsing, proposal review interface | locked |
-| **Phase 6** | Plugin ecosystem | Custom storage drivers, formatters, extensibility | locked |
+| **SOP: Project Init** | SOP | Initialize engine: scan docs/ → parse → infer templates → validate → build DB | inProgress |
+| **SOP: Storage Layer** | SOP | SQLite adapter, document persistence, sync state tracking | readyForImplementation |
+| **SOP: Formatting & Validation** | SOP | Markdown parser, template validation, link checking | readyForImplementation |
+| **SOP: Sync Detection** | SOP | Hash-based conflict detection, resolution strategies | readyForImplementation |
+| **SOP: Domain Models** | SOP | Document, Template, Proposal, SyncState types and invariants | readyForImplementation |
+| **SOP: Port Interfaces** | SOP | StorageProvider, FormattingProvider, ConflictDetector contracts | readyForImplementation |
+| **Initial Technical Design** | Task | Agent reviews Phase 1 SOPs and creates design document | blocked |
+| **Phase 2: Implement Project Init** | Task | Build init flow per SOP_PROJECT_INIT | blocked |
+| **Phase 3: Implement Document Create** | Task | Build create & validation flow | blocked |
+| **Phase 4: Implement Approval Workflow** | Task | Build proposal storage & approval flow | blocked |
+| **Phase 5: Build Web UI** | Task | Dashboard, browsing, proposal review | blocked |
+| **Phase 6: Plugin Ecosystem** | Setup | Custom storage, formatters, extensibility | blocked |
 
 ## Quick Start (Alpha — not yet implemented)
 
