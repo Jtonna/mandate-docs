@@ -1,0 +1,16 @@
+# Shell scripts and Dockerfiles must keep LF endings. CRLF breaks a shebang
+# inside a Linux container and can break RUN lines during a docker build.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+
+# PowerShell is used on Windows and is fine either way, but keeping it stable
+# avoids noisy diffs.
+*.ps1           text eol=crlf
+
+# Data and documentation the tooling reads. LF keeps hashes stable across
+# machines, which matters once content hashing is built.
+*.json          text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.md            text eol=lf

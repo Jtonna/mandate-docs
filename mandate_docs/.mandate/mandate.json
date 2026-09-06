@@ -1,0 +1,33 @@
+{
+  "mandates": {
+    "Mmx0HcpS": ".mandate/mandates/SOP_Orders.yaml"
+  },
+
+  "docs": {
+    "1Gd7nwKu": "docs/architecture/order-lifecycle.md",
+    "DgSBsJQF": "docs/architecture/persistence.md",
+    "9HVTVBD5": "docs/architecture/http-api.md",
+    "fd2e8Rm0": "docs/sop/onboarding.md"
+  },
+
+  "code": {
+    "YOiJkyjO": "src/domain/order.ts",
+    "I4qG9bvE": "src/domain/ports/order-repository.ts",
+    "34NXIPF8": "src/application/place-order.ts",
+    "f1wy2t8V": "src/adapters/http/order-controller.ts",
+    "c48AaPgP": "src/adapters/postgres/order-repository.ts",
+    "BtTe0lD6": "src/adapters/http/health-controller.ts"
+  },
+
+  "mandates_docs": {
+    "Mmx0HcpS": {
+      "1Gd7nwKu": ["has-owner", "sections-present", "claims-match-code"],
+      "9HVTVBD5": ["claims-match-code", "endpoints-exist"]
+    }
+  },
+
+  "docs_code": {
+    "1Gd7nwKu": ["YOiJkyjO", "34NXIPF8", "f1wy2t8V"],
+    "9HVTVBD5": ["f1wy2t8V"]
+  }
+}
