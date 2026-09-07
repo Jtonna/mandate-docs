@@ -189,10 +189,14 @@ README.md                     this document
   mandate.json                the rebuild cache
   mandates/
     SOP_Orders.yaml           a mandate
-docs/                         documentation tree
-  architecture/               reference material
+docs/                         stand-in documentation tree
+  architecture/               reference material, not sample data
 src/                          stand-in source tree (empty)
 ```
+
+Everything in this folder is a testing ground for the real system. The paths,
+the IDs, the mandate and its rules are sample data written by hand to exercise
+the format. None of it describes working software.
 
 `.doc-engine/` appears in section 6 but not above, because nothing builds it
 yet. It is the local database directory: gitignored, never committed, and
@@ -209,11 +213,11 @@ and that is intentional: this stage records relationships only, and nothing yet
 reads the files themselves. The trees get populated at the point where a feature
 needs real file contents to demonstrate. Content hashing is the first candidate.
 
-`docs/architecture/` is the exception. It holds real reference material about
-the architecture this project uses, and it is deliberately absent from the
-`docs` index. By section 2 that puts it in the "never scanned" state, which is
-accurate: the index was written by hand, and no scan has run. It becomes an
-indexed document the moment one does.
+`docs/architecture/` is the exception, and it is not sample data. It holds
+reference material kept for later work and is deliberately left out of the
+`docs` index. Indexing it would mix a real document into a data set that is
+otherwise entirely stubs, which would make the sample harder to reason about,
+not more realistic.
 
 ---
 

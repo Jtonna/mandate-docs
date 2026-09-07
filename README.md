@@ -22,12 +22,23 @@ codebase-sandboxer/     the tool for testing against real codebases
 
 ## mandate_docs
 
-The current stage of work. A mandate links documentation to the code it
-describes and carries the rules that keep it honest.
+The current stage of work, and a testing ground for the real system. A mandate
+links documentation to the code it describes and carries the rules that keep it
+honest.
+
+Everything in that folder is sample data. The paths point at files that do not
+exist, the mandate governs documents nobody has written, and the rules have
+never been run. It exists to exercise the format, not to document working
+software.
 
 [`mandate_docs/README.md`](mandate_docs/README.md) is the specification: the file
 format, the reasoning behind each decision, and an explicit list of what has been
 deferred. Start there.
+
+The eventual goal is to point the system at this repository and let it maintain
+its own documentation, improving the tool by using it on itself. That is a long
+way off. It needs the scan, the rule engine, and rule execution first, all of
+which are recorded as out of scope in the specification.
 
 ## codebase-sandboxer
 
