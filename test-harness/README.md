@@ -12,11 +12,12 @@ Bash only. Run it from Git Bash on Windows.
 Output:
 
 ```
-Container: mandate-ext-repo-test-spring-projects-spring-petclinic (stopped)
-Clone:     /repo
+Container: mandate-ext-test-repo-spring-projects-spring-petclinic (stopped)
+Volume:    mandate-ext-test-repo-spring-projects-spring-petclinic
+Clone:     /repo (read-only)
 
-  docker start mandate-ext-repo-test-spring-projects-spring-petclinic && docker exec -it mandate-ext-repo-test-spring-projects-spring-petclinic sh
-  docker rm -f mandate-ext-repo-test-spring-projects-spring-petclinic
+  docker start <name> && docker exec -it <name> sh
+  docker rm -f <name> && docker volume rm <name>
 ```
 
 ## Why
@@ -28,10 +29,31 @@ makes it obvious which is which.
 
 One repository per container. No shared state between them.
 
+## How it is put together
+
+One image is the environment. Each repository is a volume. The container joins
+them.
+
+```
+mandate-ext-test-repo-base        one image, git and a shell, built once
+
+per repository:
+  volume     mandate-ext-test-repo-<identifier>    the clone
+  container  mandate-ext-test-repo-<identifier>    mounts it read-only
+```
+
+Cloning happens in a throwaway container that has network access and is deleted
+the moment it finishes. The container you keep has no network at all, because a
+container's network mode is fixed when it is created and cannot be dropped
+later.
+
+The repository never enters the image. That keeps the image an environment
+rather than data, so twenty repositories still means one image.
+
 ## Naming
 
 ```
-mandate-ext-repo-test-<identifier>
+mandate-ext-test-repo-<identifier>
 ```
 
 The identifier defaults to the owner and repository from the URL. Docker names
@@ -40,10 +62,10 @@ remains is joined with dashes:
 
 ```
 https://github.com/spring-projects/spring-petclinic.git
-  -> mandate-ext-repo-test-spring-projects-spring-petclinic
+  -> mandate-ext-test-repo-spring-projects-spring-petclinic
 
 git@github.com:owner/name.git
-  -> mandate-ext-repo-test-owner-name
+  -> mandate-ext-test-repo-owner-name
 ```
 
 Including the owner means two repositories with the same name from different
@@ -53,65 +75,91 @@ Pass a second argument to override it:
 
 ```bash
 ./run.sh https://github.com/owner/name my-label
-# mandate-ext-repo-test-my-label
+# mandate-ext-test-repo-my-label
 ```
 
 Either way it is lowercased, and anything outside `a-z0-9._-` becomes a dash.
-The image takes the same name as the container. If the container already exists
-the script stops rather than replacing it.
+The container and the volume take the same name. If either already exists the
+script stops rather than replacing it.
 
 ## Managing containers
 
 There is no wrapper. These are plain Docker commands:
 
 ```bash
-docker ps -a --filter "name=mandate-ext-repo-test-"   # list them
-docker start mandate-ext-repo-test-<id>                # start one
-docker exec -it mandate-ext-repo-test-<id> sh          # shell in
-docker stop mandate-ext-repo-test-<id>                 # stop it again
-docker rm -f mandate-ext-repo-test-<id>                # remove one
-docker rmi mandate-ext-repo-test-<id>                  # remove its image
+docker ps -a --filter "name=mandate-ext-test-repo-"   # list them
+docker volume ls --filter "name=mandate-ext-test-repo-"
+docker start mandate-ext-test-repo-<id>                # start one
+docker exec -it mandate-ext-test-repo-<id> sh          # shell in
+docker stop mandate-ext-test-repo-<id>                 # stop it again
 ```
 
-Remove every harness container and image at once:
+Removing a repository takes two commands, because the container and its volume
+are separate objects:
 
 ```bash
-docker rm -f $(docker ps -aq --filter "name=mandate-ext-repo-test-")
-docker rmi $(docker images -q "mandate-ext-repo-test-*")
+docker rm -f mandate-ext-test-repo-<id>
+docker volume rm mandate-ext-test-repo-<id>
+```
+
+Remove everything the harness made:
+
+```bash
+docker rm -f $(docker ps -aq --filter "name=mandate-ext-test-repo-")
+docker volume rm $(docker volume ls -q --filter "name=mandate-ext-test-repo-")
+docker rmi mandate-ext-test-repo-base
+```
+
+The shared image is built on first use. Rebuild it after changing the
+Dockerfile:
+
+```bash
+docker build -t mandate-ext-test-repo-base test-harness
 ```
 
 ## What isolation you get
 
-At build time the only thing that runs is `git clone`, with hooks disabled
+The clone runs in a throwaway container as a non-root user, with hooks disabled
 (`core.hooksPath=/dev/null`), local-path submodules blocked
-(`protocol.file.allow=never`), and submodules skipped entirely.
+(`protocol.file.allow=never`), submodules skipped, and all capabilities dropped.
+That container is removed as soon as the clone finishes.
 
-The container is created stopped and never started by the script. Nothing runs
-after the clone finishes, so an idle repository costs no CPU or memory. Start it
-when you want a shell, stop it when you are done.
+The container you keep is created stopped and never started by the script.
+Nothing runs after the clone, so an idle repository costs no CPU or memory.
 
-When you do start it, it runs `tail -f /dev/null` as a non-root user, with
-`--network none`, `--cap-drop ALL`, `--security-opt no-new-privileges`, and no
-host mounts.
+When you start it, it runs `tail -f /dev/null` as `quarantine` (uid 10001), with
+`--network none`, `--cap-drop ALL`, `--security-opt no-new-privileges`, no host
+mounts, and `/repo` mounted **read-only**. Nothing inside can modify the code it
+is examining.
 
 ## What you do not get
 
 - **A security guarantee.** Containers share the host kernel. This is a
   boundary, not a sandbox. Treat it as raising the cost of an accident, not as
   making one impossible.
-- **An offline build.** Cloning needs the network, so the build step has it. Only
-  the running container is cut off.
+- **An offline clone.** The clone container has network access, because cloning
+  needs it. Only the container you keep is cut off.
 - **Private repositories.** No credentials are passed. An authenticated URL fails
   rather than prompting.
 - **Anything executed.** Nothing builds, installs, or tests the repository. Doing
   so inside the container voids everything above, because you would be running
   its code on purpose.
-- **Updates.** To get newer commits, remove the container and image and run again.
+- **Updates.** To get newer commits, remove the container and volume and run
+  again.
 - **Shallow clones or a specific branch.** Full clone of the default branch only.
-  Both are a `--build-arg` away if they turn out to matter.
+  Both are a flag away if they turn out to matter.
 
-## Status
+## Verified
 
-Written but never executed. Docker was not available when this was built, so no
-image has been built and no container started. Expect the first run to surface
-something.
+Run end to end against Docker, not by inspection:
+
+```
+container state after run     created, not running
+clone present at /repo        yes, spring-petclinic at 818c413
+user                          quarantine, uid 10001
+network mode                  none
+capabilities                  all dropped
+host mounts                   0
+write to /repo                refused, read-only file system
+second repository             reused the image, no rebuild
+```
