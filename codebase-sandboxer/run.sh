@@ -67,7 +67,7 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # The shared image is built once and reused. Rebuild it by hand when the
-# Dockerfile changes: docker build -t mandate-ext-test-repo-base test-harness
+# Dockerfile changes: docker build -t mandate-ext-test-repo-base codebase-sandboxer
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Building shared image $IMAGE"
   docker build -q -t "$IMAGE" -f "$HERE/Dockerfile" "$HERE" >/dev/null

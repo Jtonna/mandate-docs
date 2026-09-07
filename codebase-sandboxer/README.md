@@ -1,4 +1,4 @@
-# test-harness
+# codebase-sandboxer
 
 One script. Give it a repository URL, get a container with that repository
 cloned inside it.
@@ -114,7 +114,7 @@ The shared image is built on first use. Rebuild it after changing the
 Dockerfile:
 
 ```bash
-docker build -t mandate-ext-test-repo-base test-harness
+docker build -t mandate-ext-test-repo-base codebase-sandboxer
 ```
 
 ## What isolation you get
