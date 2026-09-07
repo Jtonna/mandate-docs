@@ -50,8 +50,9 @@ relationship between the two files.
 
 The two files together are the entire prototype. Sections 1 to 3 are the JSON
 format, section 4 the mandate, section 5 the scope, sections 6 to 8 the
-reasoning behind each decision, section 9 the wider system this serves, and the
-final section what was deliberately left out.
+reasoning behind each decision, section 9 the wider system this serves,
+section 10 the workflow every change to the software follows, and the final
+section what was deliberately left out.
 
 ---
 
@@ -185,18 +186,27 @@ which matters because it changes on every scan.
 
 ```
 README.md                     this document
+Cargo.toml                    the Rust crate; unit tests in src/, integration tests in tests/
 .mandate/
   mandate.json                the rebuild cache
   mandates/
-    SOP_Orders.yaml           a mandate
-docs/                         stand-in documentation tree
-  architecture/               reference material, not sample data
-src/                          stand-in source tree (empty)
+    SOP_Orders.yaml           the sample mandate; every path in it is a stub
+    Mandate_Parser.yaml       a real mandate governing the two documents below
+docs/
+  architecture/
+    PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
+    mandate-parser.md         how the parser and validator are built
+  sop/
+    handling-mandates.md      how a mandate is written and validated
+src/                          domain, ports, adapters, composition root
+tests/                        integration tests: port contracts, the binary, the sample
 ```
 
-Everything in this folder is a testing ground for the real system. The paths,
-the IDs, the mandate and its rules are sample data written by hand to exercise
-the format. None of it describes working software.
+This folder holds sample data and real software side by side. `SOP_Orders`
+and everything it points at is sample data, written by hand to exercise the
+format, describing no working software. `Mandate_Parser` is real: it governs
+documents that exist, links source files that exist, and the tool in `src/`
+validates it. Section 10 is the workflow every change to `src/` follows.
 
 `.doc-engine/` appears in section 6 but not above, because nothing builds it
 yet. It is the local database directory: gitignored, never committed, and
@@ -208,16 +218,15 @@ repository root, which this folder stands in for. A path is never relative to
 the file that contains it, so `mandate.json` records the mandate beside it as
 `.mandate/mandates/SOP_Orders.yaml` rather than `mandates/SOP_Orders.yaml`.
 
-The paths in `mandate.json` and in the mandate point at files that do not exist,
-and that is intentional: this stage records relationships only, and nothing yet
-reads the files themselves. The trees get populated at the point where a feature
-needs real file contents to demonstrate. Content hashing is the first candidate.
+The paths in the sample mandate point at files that do not exist, and that is
+intentional: the sample records relationships only. Running the validator on
+it reports every missing file, which is the expected result and a useful
+smoke test. The real mandate's paths all resolve. Content hashing is the
+first feature that will need file contents rather than paths.
 
-`docs/architecture/` is the exception, and it is not sample data. It holds
-reference material kept for later work and is deliberately left out of the
-`docs` index. Indexing it would mix a real document into a data set that is
-otherwise entirely stubs, which would make the sample harder to reason about,
-not more realistic.
+`docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md` is reference material about a
+pattern, not documentation of this system, and stays out of the `docs` index.
+Every other document under `docs/` is indexed.
 
 ---
 
@@ -353,8 +362,9 @@ mandate                          mandate.json
 
 ### Four rules the format defines
 
-No tooling exists yet, so nothing checks these today. They are the contract a
-parser will have to implement, not behaviour you can currently rely on.
+The validator in `src/` checks rule 2 as an error and rule 3 as a warning.
+Rules 1 and 4 concern more than one mandate, or the absence of one, and
+nothing checks them yet.
 
 1. **Two mandates may declare the same code-to-document link.** The edges are
    merged. Declaring an identical edge twice changes nothing. Their rules do not
@@ -426,12 +436,18 @@ are written down.
    wrong and needs correcting, by hand for now.
 4. **Two rebuild paths:** From `mandate.json` for speed, or from the mandate
    files for correctness. Both produce the same database.
+5. **Mandate validation:** one mandate file is parsed and checked against the
+   format and against the files it names, with every problem reported in one
+   pass. See `docs/architecture/mandate-parser.md`. This is the first piece
+   of real software, and its first use is validating the mandate that
+   governs its own documentation.
 
 **Not in scope yet:**
 
 - The documentation type guidelines.
 - Any execution. Nothing runs a rule, script or agent. The format declares them.
-- Any tooling. Nothing reads, writes, or validates these files programmatically.
+- Most tooling. Nothing reads or writes `mandate.json`, nothing scans the
+  repository, and nothing regenerates the cache from the mandates.
 - Drift detection between a document and its code.
 
 Each of those depends on the mapping existing first. Nothing else blocks them.
@@ -576,6 +592,202 @@ changes.
 Once claims can be checked against the codebase, keeping documentation current
 with the codebase comes from the same machinery. That capability is valuable,
 but it is a consequence of the rule engine rather than the goal of the project.
+
+---
+
+## 10. Development workflow
+
+Every change to the software in `src/` goes through the steps below, in order.
+No step is skipped because a change looks small. The workflow exists so that
+code, tests, documentation and mandates move together, which is the problem
+this project addresses, applied to itself.
+
+Three roles take part. The orchestrator reads, decides and reviews, and never
+writes code. An implementer writes code and tests under a brief from the
+orchestrator. A reviewer is a fresh agent that has not seen the
+implementation. The same agent never implements and reviews one change. The
+roles are described by what they do, not which model fills them, so the
+assignment can change without changing the workflow.
+
+### Step 1. Understand the problem and the ideal solution
+
+Two separate statements, written before anything else, and neither mentions
+code.
+
+- The problem: what is wrong or missing, who it affects, and how you would
+  know it was solved.
+- The ideal solution: what the world looks like when the problem is gone,
+  ignoring cost and effort.
+
+They are kept apart because what gets built is usually a compromise on the
+ideal, and the compromise should be visible rather than hidden inside the
+problem statement.
+
+The brief also lists every open decision the change will force. Section 4 and
+the future scope section record several the format leaves undefined (what a
+loader does with an inconsistent `mandate.json`, the ordering of a serialised
+file, what the scan indexes). Each one the change touches is settled with the
+user before step 2, and the answer is recorded in the brief.
+
+Output: the brief.
+
+### Step 2. Plan the solution in code
+
+Map the ideal solution onto the architecture in
+`docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md`. The plan names:
+
+- the domain types and the invariants they enforce;
+- the ports, in domain vocabulary, with what each one needs and promises;
+- the adapters, one per technology, and the in-memory fake for each driven
+  port;
+- the wiring in the composition root;
+- the files to create or change;
+- the tests, per layer: domain unit tests with fakes, a contract suite per
+  port, integration tests per driven adapter, translation tests per driving
+  adapter.
+
+Patterns already present in `src/` win over new ones. A port for something
+that will never be swapped and never needs faking is dropped from the plan
+(guide, section 8, pitfall 3).
+
+Output: the plan. The orchestrator approves it before any code is written.
+
+### Step 3. Test-driven implementation
+
+Red, green, refactor, one behaviour at a time:
+
+1. Write one failing test that states a behaviour from the plan.
+2. Run it and watch it fail for the expected reason.
+3. Write the least code that makes it pass.
+4. Run the whole suite.
+5. Refactor with the suite green.
+
+Domain tests use in-memory fakes and do no I/O. Every port has a contract
+suite that runs against every implementation, the fake included. No
+production code is written without a failing test first; a test written after
+the code proves only that the code does what it does.
+
+Tests are split the way Rust and Cargo split them, and the split is
+structural, not a naming habit. A unit test lives in the same file as the
+code, under `#[cfg(test)]`, compiles as part of the crate, and may reach
+private items. A domain test module imports nothing from an adapter: if it
+needs a port implementation it defines a small fake of its own. An
+integration test lives in `tests/`, compiles as a separate crate, and can use
+only the public API, so if it compiles the behaviour is reachable from
+outside. Anything that touches disk, runs the binary, or crosses a layer
+boundary is an integration test. Files in `tests/` are named by intent,
+because Rust calls everything there an integration test while the
+architecture guide uses that word only for a driven adapter hitting real
+technology:
+
+| File in `tests/` | Intent |
+|---|---|
+| `<port>_contract.rs` | The shared contract suite for one port, run against every implementation. |
+| `cli.rs` | The built binary run end to end against a temporary directory. |
+| `sample_mandate.rs` | The sample data parsed and validated through the public API. |
+
+Output: the diff and a green suite. The test command and its output are kept
+for step 7.
+
+### Step 4. Independent review
+
+A reviewer that has seen none of steps 1 to 3 receives the brief, the plan,
+the diff, the test output, and the architecture guide. It checks four things:
+
+- the code does what the plan says, no more and no less;
+- the guide is followed: dependencies point inward, no adapter logic in the
+  domain, no library type crosses a port;
+- the tests exercise behaviour rather than implementation;
+- anything the plan promised is missing.
+
+Output: findings, each with a severity and a proposed change. The reviewer
+proposes and never edits.
+
+### Step 5. Evaluate and apply
+
+The orchestrator reads every finding and marks it warranted, not warranted, or
+deferred, with a reason for each. Warranted changes go back through step 3,
+test first. The suite must be green again before moving on. If the changes
+were large, step 4 runs again on the result.
+
+Output: the decision on each finding, and the updated diff.
+
+### Step 6. Documentation and mandates
+
+This is the hardest step and is managed by hand until tooling exists. Two
+questions, in order.
+
+**What kind of change is this?**
+
+| Kind | Meaning |
+|---|---|
+| New feature | A capability the code did not have. |
+| Existing feature | A change to the behaviour of something already there. |
+| New SOP | A process people follow that did not exist. |
+| Existing SOP | A change to a process people already follow. |
+
+**What does the documentation need?** The distinction between the two kinds
+of file must hold:
+
+- A **document** in `docs/` describes the system: how it is designed, why it
+  is designed that way, what it does, how it is operated. It is about the
+  code or the process.
+- A **mandate** in `.mandate/mandates/` describes how a document is
+  maintained: which code it governs and which rules keep it true. It is
+  about the documentation and never about the code. Nothing that explains how
+  the system works belongs in a mandate.
+
+| Kind | In `docs/` | In `.mandate/mandates/` |
+|---|---|---|
+| New feature | Write a document of the right type, or a section in an existing document if that is where a reader would look. | Write a mandate governing the document, or add the document and its files to an existing mandate's `governs` and `code`. |
+| Existing feature | Update every document whose claims the change affects. | Confirm the mandate still links the right files. Add any new file to `code`. |
+| New SOP | Write it as an SOP. | Write a mandate. SOP rules are about shape, such as an owner or required sections, not about code. |
+| Existing SOP | Update it. | Confirm the rules still fit. |
+
+Technical documentation comes in types, and each has a shape a reader expects.
+The guidelines per type are not written yet (section 5). The types this
+project recognises:
+
+| Type | What it holds | Where |
+|---|---|---|
+| Architecture document | How a component is built and why. | `docs/architecture/` |
+| Decision record | One decision, the options considered, why one was chosen. | `docs/decisions/` |
+| API reference | The surface a caller uses: commands, endpoints, formats, errors. | `docs/api/` |
+| Network documentation | Hosts, addresses, routes, firewall rules. | `docs/network/` |
+| Service interconnectivity | Which services talk to which, over what, under what contract. | `docs/services/` |
+| Standard operating procedure | A process a person follows, with an owner and ordered steps. | `docs/sop/` |
+| Runbook | What to do when one specific thing goes wrong. | `docs/runbooks/` |
+| Onboarding | How a new person becomes productive. | `docs/sop/` |
+
+Only `docs/architecture/` and `docs/sop/` exist in the sample. The others are
+created when the first document of that type is written.
+
+Until a generator exists, `mandate.json` is updated by hand in the same step:
+every new document and source file gets an ID minted under the rules in
+section 8, and the junction tables get their entries. The scan does not exist
+either, so the `code` index holds the files a change touched rather than
+every file in the tree, and coverage figures mean nothing until it does.
+
+This section's own claims are subject to this step. A change that populates
+`src/` makes section 3 wrong, and section 3 is corrected in the same change.
+
+Output: the document changes, the mandate changes, and the `mandate.json`
+changes.
+
+### Step 7. Hand-off, approval, commit
+
+The user is notified with the brief, the plan, what was built, the test
+output, the review findings with the decision on each, and the documentation
+and mandate changes. Nothing is committed before the user approves.
+
+If the user requests changes, code changes go back to step 3, and steps 4 to
+6 run again on the result. Documentation and mandates are reviewed again
+every time, because a code change can invalidate a claim that step 6 wrote
+down.
+
+On approval, the change is committed as one commit holding code, tests,
+documents and mandates together, so the repository never holds code whose
+documentation arrived in a different commit.
 
 ---
 
