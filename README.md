@@ -26,11 +26,10 @@ The current stage of work, and a testing ground for the real system. A mandate
 links documentation to the code it describes and carries the rules that keep it
 honest.
 
-The folder now holds two things side by side. The sample mandate `SOP_Orders`
-points at files that do not exist and governs documents nobody has written; it
-exists to exercise the format. Beside it is the first real software: a Rust
-crate that parses a mandate and validates it, with real documentation and a
-real mandate governing that documentation. Nothing runs a rule yet.
+The folder holds the first real software, a Rust crate that parses a mandate
+and validates it, and the real documentation and mandate that govern it.
+Nothing in `.mandate/` or `docs/` is sample data. Test data lives under
+`mandate_docs/tests/fixtures/`. Nothing runs a rule yet.
 
 [`mandate_docs/README.md`](mandate_docs/README.md) is the specification: the file
 format, the reasoning behind each decision, and an explicit list of what has been

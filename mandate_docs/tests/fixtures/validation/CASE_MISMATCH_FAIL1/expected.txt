@@ -1,0 +1,2 @@
+FAIL
+error: governed document not found: docs/sop/handling-mandates.md

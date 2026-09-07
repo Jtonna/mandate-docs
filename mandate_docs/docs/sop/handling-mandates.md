@@ -29,7 +29,7 @@ Jacob Tonna
 
 2. Create `.mandate/mandates/<Name>.yaml` with the five fields `name`,
    `description` (optional), `rules`, `governs` and `code`, following the
-   shape of `.mandate/mandates/SOP_Orders.yaml`. Every rule is either `type:
+   shape of `.mandate/mandates/Mandate_Parser.yaml`. Every rule is either `type:
    script` with a `run` command, or `type: agent` with a `prompt`. Every path
    listed under a `code` entry's `docs` must name a document present in
    `governs`.

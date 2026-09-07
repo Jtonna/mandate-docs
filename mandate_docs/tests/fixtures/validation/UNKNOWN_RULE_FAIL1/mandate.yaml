@@ -64,6 +64,7 @@ governs:
   - doc: docs/architecture/mandate-parser.md
     rules:
       - claims-match-code
+      - no-such-rule
 
   - doc: docs/sop/handling-mandates.md
     rules:

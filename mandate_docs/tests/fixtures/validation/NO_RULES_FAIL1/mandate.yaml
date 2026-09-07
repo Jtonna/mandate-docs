@@ -29,47 +29,17 @@ description: >
 #
 # A rule's description is human-facing, like the mandate's. Only prompt is sent
 # to the agent, so editing a description can never change a result.
-rules:
-  - id: claims-match-code
-    type: agent
-    description: Documented behaviour matches what the code actually does.
-    prompt: >
-      Read the document and the source files linked to it. For every factual
-      claim the document makes about behaviour, check it against the code.
-      Report each claim the code contradicts, quoting the document line and the
-      source file and line that disagrees with it. Do not report stylistic
-      differences or missing detail, only contradictions.
-
-  - id: sop-shape
-    type: agent
-    description: The SOP has the sections an SOP requires and names an owner.
-    prompt: >
-      Confirm the document has the sections Purpose, Scope, Owner and Steps,
-      in that order, and that Owner names a person. Report any that is
-      missing, out of order, or empty.
-
-  - id: commands-work
-    type: agent
-    description: Every command the document shows behaves as described.
-    prompt: >
-      List every shell command the document shows. For each, confirm from the
-      linked source files that the command, its flags, its printed messages
-      and its exit codes match what the document says. Report each mismatch,
-      quoting the document line and the source line.
+rules: []
 
 # The documents this mandate governs, and which rules apply to each.
 # Paths are relative to the repository root. Markdown files in this repository
 # only; external documentation is not supported.
 governs:
   - doc: docs/architecture/mandate-parser.md
-    rules:
-      - claims-match-code
+    rules: []
 
   - doc: docs/sop/handling-mandates.md
-    rules:
-      - sop-shape
-      - commands-work
-      - claims-match-code
+    rules: []
 
 # The source files, and which of the documents above each one links to.
 # This is what a rule reads when it needs to check a document against code.

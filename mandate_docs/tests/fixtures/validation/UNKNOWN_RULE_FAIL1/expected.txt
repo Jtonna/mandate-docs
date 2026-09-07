@@ -1,0 +1,2 @@
+FAIL
+error: rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined

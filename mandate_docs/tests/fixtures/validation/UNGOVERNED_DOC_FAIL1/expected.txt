@@ -1,0 +1,2 @@
+FAIL
+error: code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern

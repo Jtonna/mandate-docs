@@ -1,0 +1,3 @@
+FAIL
+error: missing source file: src/main.rs
+error: missing source file: tests/validation_fixtures.rs

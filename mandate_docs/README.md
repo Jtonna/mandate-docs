@@ -2,51 +2,56 @@
 
 Open `.mandate/mandate.json`. It records which mandates govern which
 documentation, and which documentation governs which source files. This is the
-sample file in full, not an excerpt:
+file in full, not an excerpt:
 
 ```json
 {
   "mandates": {
-    "Mmx0HcpS": ".mandate/mandates/SOP_Orders.yaml"
+    "6aQ5ztd2": ".mandate/mandates/Mandate_Parser.yaml"
   },
 
   "docs": {
-    "1Gd7nwKu": "docs/architecture/order-lifecycle.md",
-    "DgSBsJQF": "docs/architecture/persistence.md",
-    "9HVTVBD5": "docs/architecture/http-api.md",
-    "fd2e8Rm0": "docs/sop/onboarding.md"
+    "NoZvYf6I": "docs/architecture/mandate-parser.md",
+    "vX2qsQpN": "docs/sop/handling-mandates.md"
   },
 
   "code": {
-    "YOiJkyjO": "src/domain/order.ts",
-    "I4qG9bvE": "src/domain/ports/order-repository.ts",
-    "34NXIPF8": "src/application/place-order.ts",
-    "f1wy2t8V": "src/adapters/http/order-controller.ts",
-    "c48AaPgP": "src/adapters/postgres/order-repository.ts",
-    "BtTe0lD6": "src/adapters/http/health-controller.ts"
+    "AGp11cEp": "src/domain/mandate.rs",
+    "0HYahGqe": "src/domain/validation.rs",
+    "9O0dF9vv": "src/domain/ports/file_tree.rs",
+    "dmgg5Era": "src/adapters/yaml.rs",
+    "oYrdLikO": "src/adapters/memory_tree.rs",
+    "uhWvYLkM": "src/adapters/fs_tree.rs",
+    "j70aaooT": "src/adapters/cli.rs",
+    "1heIzw3j": "src/main.rs",
+    "2rXErShe": "tests/file_tree_contract.rs",
+    "JTBXrGc3": "tests/common/mod.rs",
+    "r7yc78R9": "tests/validation_fixtures.rs"
   },
 
   "mandates_docs": {
-    "Mmx0HcpS": {
-      "1Gd7nwKu": ["has-owner", "sections-present", "claims-match-code"],
-      "9HVTVBD5": ["claims-match-code", "endpoints-exist"]
+    "6aQ5ztd2": {
+      "NoZvYf6I": ["claims-match-code"],
+      "vX2qsQpN": ["sop-shape", "commands-work", "claims-match-code"]
     }
   },
 
   "docs_code": {
-    "1Gd7nwKu": ["YOiJkyjO", "34NXIPF8", "f1wy2t8V"],
-    "9HVTVBD5": ["f1wy2t8V"]
+    "NoZvYf6I": ["AGp11cEp", "0HYahGqe", "9O0dF9vv", "dmgg5Era", "oYrdLikO", "uhWvYLkM", "j70aaooT", "1heIzw3j", "2rXErShe", "JTBXrGc3", "r7yc78R9"],
+    "vX2qsQpN": ["0HYahGqe", "j70aaooT", "1heIzw3j"]
   }
 }
 ```
 
-Two documents and three source files are in the indexes but reachable from no
-mandate. That is the normal state, and section 4 explains why.
+In this file every indexed entry is reachable from the one mandate, because
+the indexes are filled by hand and hold only what a mandate references. Once
+a scan fills them instead (section 2, future scope), an entry reachable from
+no mandate will be the normal state.
 
 That file is a cache. The source of truth is
-`.mandate/mandates/SOP_Orders.yaml`, which declares the same linkage by path and
-adds the rules that maintain each document. Section 4 covers the mandate and the
-relationship between the two files.
+`.mandate/mandates/Mandate_Parser.yaml`, which declares the same linkage by
+path and adds the rules that maintain each document. Section 4 covers the
+mandate and the relationship between the two files.
 
 The two files together are the entire prototype. Sections 1 to 3 are the JSON
 format, section 4 the mandate, section 5 the scope, sections 6 to 8 the
@@ -97,7 +102,7 @@ ID. Each value maps a **doc** ID to the list of rule ids that mandate applies to
 that document.
 
 ```
-"Mmx0HcpS": { "1Gd7nwKu": ["has-owner", "sections-present", "claims-match-code"] }
+"6aQ5ztd2": { "vX2qsQpN": ["sop-shape", "commands-work", "claims-match-code"] }
      ^             ^                    ^
      |             |                    the rules that apply to it
      |             the document it governs
@@ -106,7 +111,7 @@ that document.
 
 The rule ids are references. Their bodies live in the mandate file, never here.
 Because they nest under a mandate ID, two mandates can each define a rule called
-`has-owner` without colliding. Within a single mandate an id must be unique,
+`sop-shape` without colliding. Within a single mandate an id must be unique,
 since `governs` references rules by id alone.
 
 ### `docs_code`
@@ -118,35 +123,35 @@ Junction tables are named the way a lookup table is named in a relational
 schema: the two tables they join, in the order they read.
 
 ```
-"1Gd7nwKu": ["YOiJkyjO", "34NXIPF8", "f1wy2t8V"]
+"vX2qsQpN": ["0HYahGqe", "j70aaooT", "1heIzw3j"]
  ^                ^
  |                the code it governs
  the document
 ```
 
-In words: *the order lifecycle document governs `order.ts`, `place-order.ts`
-and `order-controller.ts`.*
+In words: *the handling-mandates document governs `validation.rs`,
+`cli.rs` and `main.rs`.*
 
-Following the full chain from `Mmx0HcpS` reaches every source file that the
-`SOP_Orders` mandate is ultimately responsible for, through the documents in
-between.
+Following the full chain from `6aQ5ztd2` reaches every source file that the
+`Mandate_Parser` mandate is ultimately responsible for, through the documents
+in between.
 
 The IDs are deliberately meaningless, so reading a chain means three lookups.
-Resolved, the sample chain is:
+Resolved, one branch of the chain is:
 
 ```
-Mmx0HcpS  .mandate/mandates/SOP_Orders.yaml
-  1Gd7nwKu  docs/architecture/order-lifecycle.md
-      YOiJkyjO  src/domain/order.ts
-      34NXIPF8  src/application/place-order.ts
-      f1wy2t8V  src/adapters/http/order-controller.ts
-  9HVTVBD5  docs/architecture/http-api.md
-      f1wy2t8V  src/adapters/http/order-controller.ts
+6aQ5ztd2  .mandate/mandates/Mandate_Parser.yaml
+  NoZvYf6I  docs/architecture/mandate-parser.md
+      AGp11cEp  src/domain/mandate.rs
+      0HYahGqe  src/domain/validation.rs
+      1heIzw3j  src/main.rs
+  vX2qsQpN  docs/sop/handling-mandates.md
+      0HYahGqe  src/domain/validation.rs
+      1heIzw3j  src/main.rs
 ```
 
-`order-controller.ts` arrives through both documents and is subject to both rule
-sets. The three source files not listed are in `code` and reachable from no
-mandate.
+`validation.rs` and `main.rs` arrive through both documents and are subject
+to both rule sets.
 
 ---
 
@@ -190,7 +195,6 @@ Cargo.toml                    the Rust crate; unit tests in src/, integration te
 .mandate/
   mandate.json                the rebuild cache
   mandates/
-    SOP_Orders.yaml           the sample mandate; every path in it is a stub
     Mandate_Parser.yaml       a real mandate governing the two documents below
 docs/
   architecture/
@@ -199,14 +203,18 @@ docs/
   sop/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
-tests/                        integration tests: port contracts, the binary, the sample
+tests/                        integration tests: port contracts, fixture cases
+  fixtures/
+    validation/                fixture cases, one directory each, read only by tests
 ```
 
-This folder holds sample data and real software side by side. `SOP_Orders`
-and everything it points at is sample data, written by hand to exercise the
-format, describing no working software. `Mandate_Parser` is real: it governs
-documents that exist, links source files that exist, and the tool in `src/`
-validates it. Section 10 is the workflow every change to `src/` follows.
+Nothing under `.mandate/` or `docs/` is sample data. Both are read only when
+the real program runs. `Mandate_Parser` governs documents that exist and
+links source files that exist, and the tool in `src/` validates it. Section
+10 is the workflow every change to `src/` follows.
+
+Test data lives under `tests/fixtures/`, and nothing under `.mandate/` or
+`docs/` is read by a test.
 
 `.doc-engine/` appears in section 6 but not above, because nothing builds it
 yet. It is the local database directory: gitignored, never committed, and
@@ -216,13 +224,11 @@ stage.
 Every path inside `mandate.json` and inside a mandate is relative to the
 repository root, which this folder stands in for. A path is never relative to
 the file that contains it, so `mandate.json` records the mandate beside it as
-`.mandate/mandates/SOP_Orders.yaml` rather than `mandates/SOP_Orders.yaml`.
+`.mandate/mandates/Mandate_Parser.yaml` rather than
+`mandates/Mandate_Parser.yaml`.
 
-The paths in the sample mandate point at files that do not exist, and that is
-intentional: the sample records relationships only. Running the validator on
-it reports every missing file, which is the expected result and a useful
-smoke test. The real mandate's paths all resolve. Content hashing is the
-first feature that will need file contents rather than paths.
+The mandate's paths all resolve. Content hashing is the first feature that
+will need file contents rather than paths.
 
 `docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md` is reference material about a
 pattern, not documentation of this system, and stays out of the `docs` index.
@@ -235,7 +241,7 @@ Every other document under `docs/` is indexed.
 A **mandate** is a file in `.mandate/mandates/`. It links documentation to the
 code it describes, and it carries the rules that keep that documentation honest.
 
-Read `.mandate/mandates/SOP_Orders.yaml` alongside this section.
+Read `.mandate/mandates/Mandate_Parser.yaml` alongside this section.
 
 A mandate is a middleman. It sits between documents and source files, and it
 adds the one thing a plain link cannot carry: how the documentation is
@@ -296,8 +302,8 @@ data it holds exists in full somewhere else.
 **Losing the mandates is permanent.** The linkage survives, since `mandate.json`
 holds all three indexes and both junction tables. Everything that never crosses
 over is gone: every rule body, every rule `type`, every `description`. The
-database would know `1Gd7nwKu` requires `has-owner` and have no idea what
-`has-owner` checks or how to run it, and `mandates` would point at a file that
+database would know `vX2qsQpN` requires `sop-shape` and have no idea what
+`sop-shape` checks or how to run it, and `mandates` would point at a file that
 no longer exists.
 
 Restoring from `mandate.json` alone recovers the map and none of the behaviour.
@@ -345,7 +351,7 @@ touched.
 Rule ids cross over because `governs` would otherwise be lost on a fast rebuild.
 Rule bodies do not, because running a rule means reading the mandate anyway.
 Ids nest under their mandate's ID, so two mandates can each define a rule called
-`has-owner` with no risk of collision.
+`sop-shape` with no risk of collision.
 
 Both mappings are transposed on the way across, which a parser has to do
 deliberately. The mandate writes `code:` as source file to documents, because
@@ -356,8 +362,8 @@ in both cases.
 
 ```
 mandate                          mandate.json
-  code: src/domain/order.ts        docs_code:
-    docs: [order-lifecycle.md]       1Gd7nwKu: [YOiJkyjO, ...]
+  code: src/domain/validation.rs   docs_code:
+    docs: [mandate-parser.md]        NoZvYf6I: [0HYahGqe, ...]
 ```
 
 ### Four rules the format defines
@@ -401,14 +407,17 @@ this is specified before the first loader is written.
 
 A new repository has no mandates at all. An established one has a few. Full
 coverage from mandate to document to code is unlikely ever to be reached, and
-the format assumes as much:
+the format assumes as much. Today every indexed entry is governed, because
+the index is filled by hand: nothing is added to `docs` or `code` unless a
+mandate already references it. Once a scan fills the indexes instead
+(section 2, future scope), two kinds of uncovered entry become possible:
 
-- Source files in `code` that no document covers. In the sample:
-  `order-repository.ts` (both of them) and `health-controller.ts`.
-- Documents in `docs` that no mandate governs. In the sample: `persistence.md`,
-  which documents code nobody has written a mandate for, and `onboarding.md`, an
-  SOP describing a process rather than any source file.
-- Both are visible by inspection, neither needs a marker.
+- A source file the scan finds that no document's `code` list names. It sits
+  in `code` and appears in no `docs_code` list.
+- A document the scan finds that no mandate governs. It sits in `docs` and
+  appears in no `mandates_docs` list.
+
+Both are visible by inspection, neither needs a marker.
 
 ### The document format
 
@@ -496,9 +505,9 @@ delete it and sync again.
 The obvious design is to write paths directly into the mapping:
 
 ```json
-"src/application/place-order.ts": [
-  "docs/architecture/order-lifecycle.md",
-  "docs/architecture/persistence.md"
+"src/domain/validation.rs": [
+  "docs/architecture/mandate-parser.md",
+  "docs/sop/handling-mandates.md"
 ]
 ```
 
@@ -544,8 +553,8 @@ Random IDs avoid all four failure modes without bookkeeping:
 The cost is that a random ID does not sort or read as well as `001` when scanning
 by eye. This is acceptable: the tables are separated by type, so position already
 tells you what you are looking at, and `mandate.json` is meant to be generated
-rather than hand-edited. No generator exists yet, which is why the sample was
-written by hand.
+rather than hand-edited. The IDs in `mandate.json` today were minted by hand
+from a random source, since no generator exists yet.
 
 ---
 
@@ -683,8 +692,18 @@ technology:
 | File in `tests/` | Intent |
 |---|---|
 | `<port>_contract.rs` | The shared contract suite for one port, run against every implementation. |
-| `cli.rs` | The built binary run end to end against a temporary directory. |
-| `sample_mandate.rs` | The sample data parsed and validated through the public API. |
+| `validation_fixtures.rs` | Every fixture case under `tests/fixtures/validation/` parsed and validated against file trees captured on Windows, Linux and macOS. |
+
+The command line is a driving adapter in `src/adapters/cli.rs`, with its own
+in-file unit tests. No test runs the built binary, because the binary will
+gain startup side effects.
+
+Tests never read `.mandate/` or `docs/`; those directories belong to the real
+program. A test that needs a mandate or a file tree reads it from
+`tests/fixtures/`. Fixture cases are directories named `<CHECK>_PASS<n>` or
+`<CHECK>_FAIL<n>`, and the data in the directory decides the outcome, so the
+name says what is proven and a reader can see why it passes or fails without
+reading Rust.
 
 Output: the diff and a green suite. The test command and its output are kept
 for step 7.
@@ -759,7 +778,7 @@ project recognises:
 | Runbook | What to do when one specific thing goes wrong. | `docs/runbooks/` |
 | Onboarding | How a new person becomes productive. | `docs/sop/` |
 
-Only `docs/architecture/` and `docs/sop/` exist in the sample. The others are
+Only `docs/architecture/` and `docs/sop/` exist today. The others are
 created when the first document of that type is written.
 
 Until a generator exists, `mandate.json` is updated by hand in the same step:
@@ -835,7 +854,7 @@ wrong. Git can identify the new location without any of that data living in
 
 ```bash
 git diff -M --name-status <old-ref> <new-ref>
-# R096    src/domain/order.ts    src/core/order.ts
+# R096    src/domain/mandate.rs    src/core/mandate.rs
 ```
 
 Git recomputes renames heuristically at diff time by fingerprinting files in
@@ -879,7 +898,7 @@ that scan is remains undefined:
 - Which files count. Section 4 says documentation is Markdown in this
   repository, but by that rule this README would be indexed and it is not. So
   classification is by directory, by extension, by configuration, or by
-  something else, and the sample does not say which. The boundary for source
+  something else, and nothing here says which. The boundary for source
   files is equally unstated: whether tests, generated output, vendored code, and
   build artifacts are indexed or skipped.
 - What excludes a file. Whether `.gitignore` is honoured, or a separate ignore
@@ -897,7 +916,8 @@ undefined:
 
 - What `run: ./scripts/mandate/check-owner.sh` is relative to. Every path in the
   format resolves from the repository root, but a leading `./` conventionally
-  reads as the current directory, and no `scripts/` folder exists in the sample.
+  reads as the current directory, and no `scripts/` folder exists in this
+  repository.
 - What a rule receives. Paths, file contents, both, on stdin, as arguments, as
   environment. A `type: agent` rule needs the linked documents and source files
   in its context; the format says the linkage exists and not how it is delivered.
