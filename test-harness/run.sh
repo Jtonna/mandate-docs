@@ -3,12 +3,13 @@
 #
 #   ./run.sh <repo-url> [identifier]
 #
-# The identifier defaults to the repository name. The container is named
-# mandate-docs-test-codebase-<identifier> and the clone lives at /repo.
+# The identifier defaults to the owner and repository from the URL. The
+# container is named
+# mandate-ext-repo-test-<identifier> and the clone lives at /repo.
 
 set -euo pipefail
 
-PREFIX="mandate-docs-test-codebase"
+PREFIX="mandate-ext-repo-test"
 
 if [ $# -lt 1 ] || [ $# -gt 2 ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   echo "Usage: run.sh <repo-url> [identifier]" >&2
@@ -20,12 +21,15 @@ IDENTIFIER="${2:-}"
 
 command -v docker >/dev/null 2>&1 || { echo "docker is not on PATH." >&2; exit 1; }
 
-# Derive the identifier from the last path segment of the URL when not given,
-# then reduce it to lowercase characters Docker accepts in a name.
+# Derive the identifier from the owner and repository in the URL when not given.
+# Docker names cannot contain a slash or colon, so the scheme and host are
+# dropped and the remaining path segments are joined with dashes.
 if [ -z "$IDENTIFIER" ]; then
   IDENTIFIER="${REPO_URL%/}"
-  IDENTIFIER="${IDENTIFIER##*/}"
   IDENTIFIER="${IDENTIFIER%.git}"
+  IDENTIFIER="${IDENTIFIER#*://}"          # drop scheme
+  IDENTIFIER="${IDENTIFIER#*@}"            # drop any user@ in an ssh url
+  IDENTIFIER="${IDENTIFIER#*[/:]}"         # drop host
 fi
 IDENTIFIER="$(printf '%s' "$IDENTIFIER" \
   | tr '[:upper:]' '[:lower:]' \

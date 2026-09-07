@@ -2,8 +2,9 @@
 #
 #   .\run.ps1 <repo-url> [identifier]
 #
-# The identifier defaults to the repository name. The container is named
-# mandate-docs-test-codebase-<identifier> and the clone lives at /repo.
+# The identifier defaults to the owner and repository from the URL. The
+# container is named mandate-ext-repo-test-<identifier> and the clone lives
+# at /repo.
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -14,17 +15,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$prefix = 'mandate-docs-test-codebase'
+$prefix = 'mandate-ext-repo-test'
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Error 'docker is not on PATH.'
     exit 1
 }
 
-# Derive the identifier from the last path segment of the URL when not given,
-# then reduce it to lowercase characters Docker accepts in a name.
+# Derive the identifier from the owner and repository in the URL when not given.
+# Docker names cannot contain a slash or colon, so the scheme and host are
+# dropped and the remaining path segments are joined with dashes.
 if ([string]::IsNullOrWhiteSpace($Identifier)) {
-    $Identifier = ($RepoUrl.TrimEnd('/') -split '/')[-1] -replace '\.git$', ''
+    $Identifier = $RepoUrl.TrimEnd('/') -replace '\.git$', ''
+    $Identifier = $Identifier -replace '^[a-zA-Z][a-zA-Z0-9+.-]*://', ''
+    $Identifier = $Identifier -replace '^[^/@]*@', ''
+    $Identifier = $Identifier -replace '^[^/:]*[/:]', ''
 }
 $Identifier = $Identifier.ToLowerInvariant() -replace '[^a-z0-9._-]', '-'
 $Identifier = $Identifier -replace '^[._-]+', '' -replace '[._-]+$', ''
