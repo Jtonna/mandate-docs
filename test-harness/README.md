@@ -13,10 +13,10 @@ cloned inside it.
 Output:
 
 ```
-Container: mandate-docs-test-codebase-spring-petclinic
+Container: mandate-docs-test-codebase-spring-petclinic (stopped)
 Clone:     /repo
 
-  docker exec -it mandate-docs-test-codebase-spring-petclinic sh
+  docker start mandate-docs-test-codebase-spring-petclinic && docker exec -it mandate-docs-test-codebase-spring-petclinic sh
   docker rm -f mandate-docs-test-codebase-spring-petclinic
 ```
 
@@ -53,9 +53,18 @@ There is no wrapper. These are plain Docker commands:
 
 ```bash
 docker ps -a --filter "name=mandate-docs-test-codebase-"   # list them
+docker start mandate-docs-test-codebase-<id>                # start one
 docker exec -it mandate-docs-test-codebase-<id> sh          # shell in
+docker stop mandate-docs-test-codebase-<id>                 # stop it again
 docker rm -f mandate-docs-test-codebase-<id>                # remove one
 docker rmi mandate-docs-test-codebase-<id>                  # remove its image
+```
+
+Remove every harness container and image at once:
+
+```bash
+docker rm -f $(docker ps -aq --filter "name=mandate-docs-test-codebase-")
+docker rmi $(docker images -q "mandate-docs-test-codebase-*")
 ```
 
 ## What isolation you get
@@ -64,7 +73,11 @@ At build time the only thing that runs is `git clone`, with hooks disabled
 (`core.hooksPath=/dev/null`), local-path submodules blocked
 (`protocol.file.allow=never`), and submodules skipped entirely.
 
-At run time the container runs `tail -f /dev/null` as a non-root user, with
+The container is created stopped and never started by the script. Nothing runs
+after the clone finishes, so an idle repository costs no CPU or memory. Start it
+when you want a shell, stop it when you are done.
+
+When you do start it, it runs `tail -f /dev/null` as a non-root user, with
 `--network none`, `--cap-drop ALL`, `--security-opt no-new-privileges`, and no
 host mounts.
 

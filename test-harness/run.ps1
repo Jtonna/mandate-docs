@@ -47,12 +47,14 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 docker build --build-arg "REPO_URL=$RepoUrl" -t $name -f (Join-Path $here 'Dockerfile') $here
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-docker run -d --name $name --network none --cap-drop ALL --security-opt no-new-privileges $name | Out-Null
+# create, not run. The clone already happened at build time, so the container
+# has nothing to do until you want a shell in it. It is left stopped.
+docker create --name $name --network none --cap-drop ALL --security-opt no-new-privileges $name tail -f /dev/null | Out-Null
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ''
-Write-Host "Container: $name"
+Write-Host "Container: $name (stopped)"
 Write-Host 'Clone:     /repo'
 Write-Host ''
-Write-Host "  docker exec -it $name sh"
+Write-Host "  docker start $name; docker exec -it $name sh"
 Write-Host "  docker rm -f $name"
