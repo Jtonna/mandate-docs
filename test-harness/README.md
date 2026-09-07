@@ -6,9 +6,8 @@ cloned inside it.
 ```bash
 ./run.sh https://github.com/spring-projects/spring-petclinic
 ```
-```powershell
-.\run.ps1 https://github.com/spring-projects/spring-petclinic
-```
+
+Bash only. Run it from Git Bash on Windows.
 
 Output:
 

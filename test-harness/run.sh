@@ -56,7 +56,9 @@ docker build \
   -f "$HERE/Dockerfile" \
   "$HERE"
 
-docker run -d \
+# create, not run. The clone already happened at build time, so the container
+# has nothing to do until you want a shell in it. It is left stopped.
+docker create \
   --name "$NAME" \
   --network none \
   --cap-drop ALL \
@@ -65,9 +67,9 @@ docker run -d \
 
 cat <<EOM
 
-Container: $NAME
+Container: $NAME (stopped)
 Clone:     /repo
 
-  docker exec -it $NAME sh
+  docker start $NAME && docker exec -it $NAME sh
   docker rm -f $NAME
 EOM
