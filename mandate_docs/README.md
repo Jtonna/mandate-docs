@@ -189,7 +189,8 @@ README.md                     this document
   mandate.json                the rebuild cache
   mandates/
     SOP_Orders.yaml           a mandate
-docs/                         stand-in documentation tree (empty)
+docs/                         documentation tree
+  architecture/               reference material
 src/                          stand-in source tree (empty)
 ```
 
@@ -203,11 +204,16 @@ repository root, which this folder stands in for. A path is never relative to
 the file that contains it, so `mandate.json` records the mandate beside it as
 `.mandate/mandates/SOP_Orders.yaml` rather than `mandates/SOP_Orders.yaml`.
 
-The paths point at files that do not exist, and that is intentional: this stage
-records relationships only, and nothing yet reads the files themselves.
+The paths in `mandate.json` and in the mandate point at files that do not exist,
+and that is intentional: this stage records relationships only, and nothing yet
+reads the files themselves. The trees get populated at the point where a feature
+needs real file contents to demonstrate. Content hashing is the first candidate.
 
-The trees get populated at the point where a feature needs real file contents to
-demonstrate. Content hashing is the first candidate.
+`docs/architecture/` is the exception. It holds real reference material about
+the architecture this project uses, and it is deliberately absent from the
+`docs` index. By section 2 that puts it in the "never scanned" state, which is
+accurate: the index was written by hand, and no scan has run. It becomes an
+indexed document the moment one does.
 
 ---
 

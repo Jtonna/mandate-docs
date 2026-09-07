@@ -16,9 +16,8 @@ against the codebase.
 ## Where things are
 
 ```
-mandate_docs/           the format, and the prototype
+mandate_docs/           the format, the prototype, and reference material
 codebase-sandboxer/     the tool for testing against real codebases
-docs/architecture/      reference material
 ```
 
 ## mandate_docs
