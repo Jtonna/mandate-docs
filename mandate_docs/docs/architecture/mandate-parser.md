@@ -40,10 +40,12 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private `FakeTree` so the domain test module imports nothing from an adapter. |
 | `tests/file_tree_contract.rs` | integration, contract | One assertion function run against both `InMemoryFileTree` and `FsFileTree`, the latter on a real temporary directory. |
 | `src/adapters/cli.rs` | unit, in-file | Argument parsing and `execute`, using a private fake `FileTree` and in-memory writers. No process is launched. |
-| `tests/common/mod.rs` | shared loader | Loads a fixture case directory for `tests/validation_fixtures.rs`. Not a test target itself. |
-| `tests/validation_fixtures.rs` | integration | Every case under `tests/fixtures/validation/` parsed and validated against trees captured on Windows, Linux and macOS. |
+| `tests/fake_repo/mod.rs` | shared helper | An in-memory `FakeRepo` that implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`, plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
+| `tests/validation_fixtures.rs` | integration | The root that includes each case's `test.rs`. |
+| `tests/fixtures/validation/<CASE>/test.rs` | integration | One or more tests per case. |
 
-Tests never read `.mandate/` or `docs/`, and no test runs the built binary.
+Tests never read `docs/`, and no test runs the built binary. This repository
+has no `.mandate/` folder to read.
 
 The `serde`-derived structs (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`,
 `CodeLinkDoc`) live only in `src/adapters/yaml.rs` and never leave that
@@ -120,49 +122,48 @@ warning rather than an error.
 ## Fixture cases
 
 `tests/fixtures/validation/` holds one directory per case, named
-`<CHECK>_PASS<n>` or `<CHECK>_FAIL<n>`. Each directory holds five files:
+`<CHECK>_PASS<n>` or `<CHECK>_FAIL<n>`. Each directory holds two files:
 
 - `mandate.yaml`, the mandate under test.
-- `tree.windows.txt`, `tree.linux.txt`, `tree.macos.txt`, one file listing
-  per operating system.
-- `expected.txt`, the report the case must produce.
+- `test.rs`, the case's own test module.
 
-A tree file's first line is the repository root exactly as that OS prints
-it; every following line is one listing entry in that OS's format,
-directories included. `tests/common/mod.rs` strips the root prefix,
-converts backslashes to forward slashes, and strips any leading `./`, so
-the same case can be checked against three different path conventions from
-one set of repo-relative paths. An entry that is not under the root,
-other than the root itself, is rejected with a panic naming the line,
-so a hand-written tree cannot silently produce a wrong path.
+The test parses the mandate with `fake_repo::parse`, builds a `FakeRepo`
+with every linked file present via `FakeRepo::with_every_file_in`, applies
+the case's edit in code (`remove`, `rename`, or a change to the parsed
+`Mandate` value), then calls `fake_repo::check` and asserts the exact
+report lines with `assert_passes`, `assert_passes_with_warnings` or
+`assert_fails`. Because the assertion is exact, an unexpected extra line
+fails the test. A case can hold more than one test, and three of the nine
+do. Registering a case means adding one `#[path]` line to
+`tests/validation_fixtures.rs`, naming the case's `test.rs`. A test in that
+file reads the case directories and fails if any directory has no
+registration line, or any registered name has no directory.
 
-`expected.txt` starts with `PASS` or `FAIL` on line 1, followed by the
-exact `error:` and `warning:` lines the report must contain, in any order.
+Each `mandate.yaml` is an independent copy, edited only where the case
+needs it; there is nothing else it is kept in sync with.
 
-Every fixture `mandate.yaml` is a snapshot copy of
-`.mandate/mandates/Mandate_Parser.yaml`, edited only where the case needs
-it. It does not track the real mandate, so a later edit to
-`Mandate_Parser.yaml` does not change what a fixture asserts.
-
-| Case | Edit | Proves |
+| Case | What the test does | Proves |
 |---|---|---|
-| `ALL_LINKS_PRESENT_PASS1` | None; an unedited copy of the real mandate and tree. | The real mandate validates clean on all three operating systems. |
-| `CASE_MISMATCH_FAIL1` | Tree lists `docs/sop/Handling-Mandates.md` instead of `docs/sop/handling-mandates.md`. | Matching is case-sensitive on every operating system, and the case fails on all three trees. The rule is exact matching because the three disagree: Linux allows two names differing only by case in one directory, while Windows and macOS refuse it by default, so exact matching is the only behaviour that is the same everywhere. |
-| `CODE_MISSING_FAIL1` | Tree omits `src/main.rs` and `tests/validation_fixtures.rs`. | `ValidationError::CodeMissing` fires once per missing source file. |
-| `DOC_MISSING_FAIL1` | Tree omits the whole `docs/sop/` directory. | `ValidationError::DocMissing` fires for a governed document absent from the tree. |
-| `DUPLICATE_RULE_FAIL1` | A second rule with id `claims-match-code` is appended to `rules`. | `ValidationError::DuplicateRuleId` fires on a repeated id. |
-| `NO_RULES_FAIL1` | `rules` is emptied and every `governs` entry's `rules` list is emptied with it. | `ValidationError::NoRules` fires when a mandate defines no rules at all. |
-| `UNGOVERNED_DOC_FAIL1` | A `code` entry gains a `docs` reference to `docs/architecture/other.md`, which no `governs` entry lists. | `ValidationError::CodeLinksUngovernedDoc` fires for format rule 2. |
-| `UNKNOWN_RULE_FAIL1` | A `governs` entry references rule id `no-such-rule`, which no `rules` entry defines. | `ValidationError::UnknownRule` fires for a dangling rule reference. |
-| `UNREFERENCED_RULE_PASS1` | A new rule `unused-rule` is added to `rules` but assigned to no document. | `ValidationWarning::UnreferencedRule` fires and does not fail the mandate, per format rule 3. |
+| `ALL_LINKS_PRESENT_PASS1` | Parses the mandate, builds a repo with every linked file present, and checks the report is empty. | An unedited mandate with every file present validates clean. |
+| `CASE_MISMATCH_FAIL1` | Two tests. One renames `docs/sop/handling-mandates.md` to `docs/sop/Handling-Mandates.md` in the repo and asserts `governed document not found: docs/sop/handling-mandates.md`. The other checks the unedited repo, with the lowercase path present, passes. | Matching is case-sensitive. Chosen because Linux allows two names differing only by case in one directory, while Windows and macOS refuse it by default, so exact matching is the only behaviour that is the same on all three. |
+| `CODE_MISSING_FAIL1` | Removes `src/main.rs` and `tests/validation_fixtures.rs` from the repo and asserts both `missing source file:` lines. | `ValidationError::CodeMissing` fires once per missing source file. |
+| `DOC_MISSING_FAIL1` | Two tests. One removes `docs/sop/handling-mandates.md` from the repo and asserts `governed document not found: docs/sop/handling-mandates.md`. The other removes it and adds it back, and asserts the report is empty. | `ValidationError::DocMissing` fires for a governed document absent from the repo, and clears once the file is present again. |
+| `DUPLICATE_RULE_FAIL1` | The mandate's `rules` list has a second entry with id `claims-match-code`; the test asserts `duplicate rule id 'claims-match-code'`. | `ValidationError::DuplicateRuleId` fires on a repeated id. |
+| `NO_RULES_FAIL1` | The mandate's `rules` list is empty, and every `governs` entry's `rules` list is empty with it; the test asserts `no rules defined; a mandate needs at least one`. | `ValidationError::NoRules` fires when a mandate defines no rules at all. |
+| `UNGOVERNED_DOC_FAIL1` | The `code` entry for `src/domain/mandate.rs` gains a `docs` reference to `docs/architecture/other.md`, which no `governs` entry lists; the test asserts `code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern`. | `ValidationError::CodeLinksUngovernedDoc` fires for format rule 2. |
+| `UNKNOWN_RULE_FAIL1` | The `governs` entry for `docs/architecture/mandate-parser.md` gains a rule reference `no-such-rule`, which no `rules` entry defines; the test asserts `rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined`. | `ValidationError::UnknownRule` fires for a dangling rule reference. |
+| `UNREFERENCED_RULE_PASS1` | Two tests. One parses the mandate, whose `rules` list has an added `unused-rule` entry assigned to no document, and asserts the report has no errors and exactly the warning `rule 'unused-rule' is defined but no document references it`. The other pushes `unused-rule` onto the first `governs` entry's `rules` list in code and asserts the report is then empty. | `ValidationWarning::UnreferencedRule` fires and does not fail the mandate, per format rule 3, and clears once the rule is referenced. |
 
 ## Running it
 
-From `mandate_docs/`:
+Run from an adopting project's root, with `--root .`:
 
 ```
-cargo run -- validate <mandate-file> --root <dir>
+cargo run -- validate <mandate-file> --root .
 ```
+
+This repository has no mandate of its own yet, so there is nothing here
+to run it against.
 
 On success, `execute` prints one line per error (`error: <message>`, none in
 this case), one line per warning (`warning: <message>`), then:
@@ -181,13 +182,13 @@ and exits `0`. On any validation error, `execute` prints the `error:` and
 that can print `failed to read '<path>': <os error>`, since only it reads
 the mandate file from disk before calling `execute`.
 
-`cargo test` runs 28 tests: 23 unit tests under `src/` (7 in
+`cargo test` runs 41 tests: 23 unit tests under `src/` (7 in
 `adapters::cli::tests`, 5 in `adapters::yaml::tests`, 11 in
-`domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 3 in
-the `tests/validation_fixtures.rs` target: two unit tests of the loader in
-`tests/common/mod.rs` (it strips each operating system's root format, and it
-rejects an entry that is not under the root) and one test that walks all 9
-cases under `tests/fixtures/validation/` against each of their 3 trees.
+`domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 16 in
+the `tests/validation_fixtures.rs` target: 3 unit tests of `FakeRepo` in
+`tests/fake_repo/mod.rs`, 12 tests across the nine cases under
+`tests/fixtures/validation/`, and one guard that every case directory has
+its `#[path]` registration line.
 
 ## Decisions
 
@@ -208,6 +209,7 @@ cases under `tests/fixtures/validation/` against each of their 3 trees.
   itself, rather than through the built binary. The binary will gain
   startup side effects of its own, so no test launches it; `parse_args` and
   `execute` are exercised directly instead.
-- Validation behaviour is proven by the fixture directories under
-  `tests/fixtures/validation/`, not by prose alone, so a reader can see
-  what passes and what fails, and why, without reading any Rust.
+- Validation behaviour is proven by fixture directories whose data and a
+  short test decide the outcome, built on one shared fake repository rather
+  than per-case file listings, so a case is cheap to add and can prove
+  several things.

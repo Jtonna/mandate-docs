@@ -27,9 +27,11 @@ links documentation to the code it describes and carries the rules that keep it
 honest.
 
 The folder holds the first real software, a Rust crate that parses a mandate
-and validates it, and the real documentation and mandate that govern it.
-Nothing in `.mandate/` or `docs/` is sample data. Test data lives under
-`mandate_docs/tests/fixtures/`. Nothing runs a rule yet.
+and validates it, and the documentation for it under `docs/`. There is no
+`.mandate/` folder here, because that folder belongs to a project that has
+mandate installed, and this repository does not yet run mandate on itself.
+Test data lives under `mandate_docs/tests/fixtures/`. Nothing runs a rule
+yet.
 
 [`mandate_docs/README.md`](mandate_docs/README.md) is the specification: the file
 format, the reasoning behind each decision, and an explicit list of what has been
@@ -37,9 +39,9 @@ deferred. Start there.
 
 The eventual goal is to point the system at this repository and let it maintain
 its own documentation, improving the tool by using it on itself. The first step
-is taken, since the tool validates the mandate that governs its own
-documentation. It still needs the scan, the rule engine, and rule execution,
-all recorded as out of scope in the specification.
+is taken, since the tool can validate a mandate. It still needs the scan, the
+rule engine, and rule execution, all recorded as out of scope in the
+specification.
 
 ## codebase-sandboxer
 

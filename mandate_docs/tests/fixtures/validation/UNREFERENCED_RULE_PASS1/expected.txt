@@ -1,2 +1,0 @@
-PASS
-warning: rule 'unused-rule' is defined but no document references it

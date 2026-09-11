@@ -1,8 +1,10 @@
 # mandate-docs
 
-Open `.mandate/mandate.json`. It records which mandates govern which
-documentation, and which documentation governs which source files. This is the
-file in full, not an excerpt:
+A project that adopts mandate carries a `.mandate/mandate.json`. It records
+which mandates govern which documentation, and which documentation governs
+which source files. This is what that file looks like, using this
+repository's own documents and source files as the example, although this
+repository does not yet carry one (see section 3):
 
 ```json
 {
@@ -43,15 +45,15 @@ file in full, not an excerpt:
 }
 ```
 
-In this file every indexed entry is reachable from the one mandate, because
-the indexes are filled by hand and hold only what a mandate references. Once
-a scan fills them instead (section 2, future scope), an entry reachable from
-no mandate will be the normal state.
+In this example every indexed entry is reachable from the one mandate,
+because the indexes are filled by hand and hold only what a mandate
+references. Once a scan fills them instead (section 2, future scope), an
+entry reachable from no mandate will be the normal state.
 
-That file is a cache. The source of truth is
-`.mandate/mandates/Mandate_Parser.yaml`, which declares the same linkage by
-path and adds the rules that maintain each document. Section 4 covers the
-mandate and the relationship between the two files.
+That file is a cache; the source of truth is the mandate beside it,
+`.mandate/mandates/Mandate_Parser.yaml` in the example, which declares the
+same linkage by path and adds the rules that maintain each document. Section
+4 covers the mandate and the relationship between the two files.
 
 The two files together are the entire prototype. Sections 1 to 3 are the JSON
 format, section 4 the mandate, section 5 the scope, sections 6 to 8 the
@@ -189,13 +191,13 @@ which matters because it changes on every scan.
 
 ## 3. Folder layout
 
+A `.mandate/` folder appears only in a project where mandate is installed.
+This repository is the program and does not yet run mandate on itself, so it
+has none:
+
 ```
 README.md                     this document
 Cargo.toml                    the Rust crate; unit tests in src/, integration tests in tests/
-.mandate/
-  mandate.json                the rebuild cache
-  mandates/
-    Mandate_Parser.yaml       a real mandate governing the two documents below
 docs/
   architecture/
     PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
@@ -204,17 +206,14 @@ docs/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
 tests/                        integration tests: port contracts, fixture cases
+  fake_repo/                  the fake repository every fixture case builds on
   fixtures/
-    validation/                fixture cases, one directory each, read only by tests
+    validation/                one directory per case: mandate.yaml and test.rs
 ```
 
-Nothing under `.mandate/` or `docs/` is sample data. Both are read only when
-the real program runs. `Mandate_Parser` governs documents that exist and
-links source files that exist, and the tool in `src/` validates it. Section
-10 is the workflow every change to `src/` follows.
-
-Test data lives under `tests/fixtures/`, and nothing under `.mandate/` or
-`docs/` is read by a test.
+Nothing under `docs/` is sample data, and no test reads it. There is no
+`.mandate/` here yet; test data lives under `tests/fixtures/`. Section 10 is
+the workflow every change to `src/` follows.
 
 `.doc-engine/` appears in section 6 but not above, because nothing builds it
 yet. It is the local database directory: gitignored, never committed, and
@@ -227,9 +226,6 @@ the file that contains it, so `mandate.json` records the mandate beside it as
 `.mandate/mandates/Mandate_Parser.yaml` rather than
 `mandates/Mandate_Parser.yaml`.
 
-The mandate's paths all resolve. Content hashing is the first feature that
-will need file contents rather than paths.
-
 `docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md` is reference material about a
 pattern, not documentation of this system, and stays out of the `docs` index.
 Every other document under `docs/` is indexed.
@@ -241,7 +237,9 @@ Every other document under `docs/` is indexed.
 A **mandate** is a file in `.mandate/mandates/`. It links documentation to the
 code it describes, and it carries the rules that keep that documentation honest.
 
-Read `.mandate/mandates/Mandate_Parser.yaml` alongside this section.
+Read the example mandate shown in the intro, `Mandate_Parser.yaml`, alongside
+this section; the fixture cases under `tests/fixtures/validation/` carry
+copies of it.
 
 A mandate is a middleman. It sits between documents and source files, and it
 adds the one thing a plain link cannot carry: how the documentation is
@@ -448,8 +446,8 @@ are written down.
 5. **Mandate validation:** one mandate file is parsed and checked against the
    format and against the files it names, with every problem reported in one
    pass. See `docs/architecture/mandate-parser.md`. This is the first piece
-   of real software, and its first use is validating the mandate that
-   governs its own documentation.
+   of real software; it will validate this repository's own mandate once
+   mandate is installed here.
 
 **Not in scope yet:**
 
@@ -553,8 +551,8 @@ Random IDs avoid all four failure modes without bookkeeping:
 The cost is that a random ID does not sort or read as well as `001` when scanning
 by eye. This is acceptable: the tables are separated by type, so position already
 tells you what you are looking at, and `mandate.json` is meant to be generated
-rather than hand-edited. The IDs in `mandate.json` today were minted by hand
-from a random source, since no generator exists yet.
+rather than hand-edited. The IDs in the example `mandate.json` above were
+minted by hand from a random source, since no generator exists yet.
 
 ---
 
@@ -692,18 +690,19 @@ technology:
 | File in `tests/` | Intent |
 |---|---|
 | `<port>_contract.rs` | The shared contract suite for one port, run against every implementation. |
-| `validation_fixtures.rs` | Every fixture case under `tests/fixtures/validation/` parsed and validated against file trees captured on Windows, Linux and macOS. |
+| `validation_fixtures.rs` | The root that includes every fixture case's `test.rs`. |
 
 The command line is a driving adapter in `src/adapters/cli.rs`, with its own
 in-file unit tests. No test runs the built binary, because the binary will
 gain startup side effects.
 
-Tests never read `.mandate/` or `docs/`; those directories belong to the real
-program. A test that needs a mandate or a file tree reads it from
-`tests/fixtures/`. Fixture cases are directories named `<CHECK>_PASS<n>` or
-`<CHECK>_FAIL<n>`, and the data in the directory decides the outcome, so the
-name says what is proven and a reader can see why it passes or fails without
-reading Rust.
+Tests never read `docs/`, and this repository has no `.mandate/`. A test
+that needs a mandate or a file tree gets it from `tests/fixtures/`. Each
+fixture case is a directory named `<CHECK>_PASS<n>` or `<CHECK>_FAIL<n>`
+holding `mandate.yaml` and a `test.rs`; the test builds a fake repository
+from the mandate with the shared helper in `tests/fake_repo/`, adds, removes
+or renames files, and asserts the exact report, so the name says what is
+proven and the case can prove several things.
 
 Output: the diff and a green suite. The test command and its output are kept
 for step 7.
@@ -763,6 +762,11 @@ of file must hold:
 | New SOP | Write it as an SOP. | Write a mandate. SOP rules are about shape, such as an owner or required sections, not about code. |
 | Existing SOP | Update it. | Confirm the rules still fit. |
 
+The mandate half of this step applies to a project where mandate is
+installed. This repository does not yet run mandate on itself, so until it
+does, step 6 here produces documents only; the mandate and `mandate.json`
+entries are written when mandate is installed in this repository.
+
 Technical documentation comes in types, and each has a shape a reader expects.
 The guidelines per type are not written yet (section 5). The types this
 project recognises:
@@ -781,11 +785,12 @@ project recognises:
 Only `docs/architecture/` and `docs/sop/` exist today. The others are
 created when the first document of that type is written.
 
-Until a generator exists, `mandate.json` is updated by hand in the same step:
-every new document and source file gets an ID minted under the rules in
-section 8, and the junction tables get their entries. The scan does not exist
-either, so the `code` index holds the files a change touched rather than
-every file in the tree, and coverage figures mean nothing until it does.
+In an adopting project, until a generator exists, `mandate.json` is updated
+by hand in the same step: every new document and source file gets an ID
+minted under the rules in section 8, and the junction tables get their
+entries. The scan does not exist either, so the `code` index holds the files
+a change touched rather than every file in the tree, and coverage figures
+mean nothing until it does.
 
 This section's own claims are subject to this step. A change that populates
 `src/` makes section 3 wrong, and section 3 is corrected in the same change.

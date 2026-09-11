@@ -1,76 +1,79 @@
-//! Fixture-driven validation tests. Walks every case under
-//! `tests/fixtures/validation/`, parses its mandate through the public API,
-//! validates it against each of the three OS-flavoured trees, and compares
-//! the rendered report (sorted) against the case's `expected.txt`.
+//! Fixture-driven validation tests. Each case under
+//! `tests/fixtures/validation/<CASE>/` carries its own `mandate.yaml` and
+//! `test.rs`, using the shared [`fake_repo`] helpers to build an in-memory
+//! repository and check the rendered report against expectations.
 
-mod common;
+mod fake_repo;
 
-use std::fs;
-use std::path::PathBuf;
+/// Every case directory under `tests/fixtures/validation/` that is wired up
+/// below with a `#[path]` mod line. Kept next to those lines so the two stay
+/// in sync; [`every_case_directory_is_registered`] catches drift between
+/// them (a new directory added without a mod line would otherwise compile
+/// and silently run nothing).
+const REGISTERED_CASES: &[&str] = &[
+    "ALL_LINKS_PRESENT_PASS1",
+    "CASE_MISMATCH_FAIL1",
+    "CODE_MISSING_FAIL1",
+    "DOC_MISSING_FAIL1",
+    "DUPLICATE_RULE_FAIL1",
+    "NO_RULES_FAIL1",
+    "UNGOVERNED_DOC_FAIL1",
+    "UNKNOWN_RULE_FAIL1",
+    "UNREFERENCED_RULE_PASS1",
+];
 
-use mandate::adapters::yaml::parse_mandate;
-use mandate::domain::validation::validate;
+#[path = "fixtures/validation/ALL_LINKS_PRESENT_PASS1/test.rs"]
+mod all_links_present_pass1;
 
-fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/validation")
-}
+#[path = "fixtures/validation/CASE_MISMATCH_FAIL1/test.rs"]
+mod case_mismatch_fail1;
 
+#[path = "fixtures/validation/CODE_MISSING_FAIL1/test.rs"]
+mod code_missing_fail1;
+
+#[path = "fixtures/validation/DOC_MISSING_FAIL1/test.rs"]
+mod doc_missing_fail1;
+
+#[path = "fixtures/validation/DUPLICATE_RULE_FAIL1/test.rs"]
+mod duplicate_rule_fail1;
+
+#[path = "fixtures/validation/NO_RULES_FAIL1/test.rs"]
+mod no_rules_fail1;
+
+#[path = "fixtures/validation/UNGOVERNED_DOC_FAIL1/test.rs"]
+mod ungoverned_doc_fail1;
+
+#[path = "fixtures/validation/UNKNOWN_RULE_FAIL1/test.rs"]
+mod unknown_rule_fail1;
+
+#[path = "fixtures/validation/UNREFERENCED_RULE_PASS1/test.rs"]
+mod unreferenced_rule_pass1;
+
+/// Guards against a case directory existing on disk without a matching
+/// `#[path]` mod line above: such a directory compiles fine and its tests
+/// simply never run, silently.
 #[test]
-fn every_fixture_case_matches_its_expected_report_on_every_os() {
-    let dir = fixtures_dir();
-    let mut case_dirs: Vec<PathBuf> = fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()))
+fn every_case_directory_is_registered() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/validation");
+
+    let mut found: Vec<String> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("read {dir}: {e}"))
         .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect();
-    case_dirs.sort();
+    found.sort();
+
+    let mut registered: Vec<String> = REGISTERED_CASES.iter().map(|s| s.to_string()).collect();
+    registered.sort();
+
+    let unregistered: Vec<&String> = found.iter().filter(|f| !registered.contains(f)).collect();
+    let missing: Vec<&String> = registered.iter().filter(|r| !found.contains(r)).collect();
 
     assert!(
-        case_dirs.len() >= 9,
-        "expected at least 9 fixture cases under {}, found {}",
-        dir.display(),
-        case_dirs.len()
+        unregistered.is_empty() && missing.is_empty(),
+        "case directories and REGISTERED_CASES disagree: \
+         directories with no #[path] mod line: {unregistered:?}; \
+         registered names with no directory: {missing:?}"
     );
-
-    for case_dir in &case_dirs {
-        let case = common::load_case(case_dir);
-
-        let mandate = parse_mandate(&case.mandate_yaml).unwrap_or_else(|e| {
-            panic!(
-                "fixture case {}: mandate.yaml failed to parse: {e}",
-                case.name
-            )
-        });
-
-        for (os, tree_text) in &case.trees {
-            let tree = common::load_tree(tree_text);
-            let report = validate(&mandate, &tree);
-
-            let mut actual_lines: Vec<String> = report
-                .errors
-                .iter()
-                .map(|e| format!("error: {e}"))
-                .chain(report.warnings.iter().map(|w| format!("warning: {w}")))
-                .collect();
-            actual_lines.sort();
-
-            let mut expected_lines = case.expected_lines.clone();
-            expected_lines.sort();
-
-            assert_eq!(
-                actual_lines, expected_lines,
-                "fixture case {} on {os}: report lines did not match expected.txt",
-                case.name
-            );
-            assert_eq!(
-                report.is_valid(),
-                case.expected_pass,
-                "fixture case {} on {os}: expected pass={}, got is_valid()={}",
-                case.name,
-                case.expected_pass,
-                report.is_valid()
-            );
-        }
-    }
 }

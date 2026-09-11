@@ -1,2 +1,0 @@
-FAIL
-error: duplicate rule id 'claims-match-code'

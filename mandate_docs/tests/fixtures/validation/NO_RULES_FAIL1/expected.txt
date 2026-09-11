@@ -1,2 +1,0 @@
-FAIL
-error: no rules defined; a mandate needs at least one

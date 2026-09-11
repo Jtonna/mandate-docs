@@ -14,7 +14,9 @@ Covers writing a new mandate file in `.mandate/mandates/`, changing an
 existing one, and updating `.mandate/mandate.json` to match. It does not
 cover writing the documents a mandate governs, which follow the guidelines
 for their document type. It does not cover running a rule: nothing runs
-rules yet, per `README.md` section 5.
+rules yet, per `README.md` section 5. This procedure applies in a project
+where mandate is installed; this repository does not yet carry a
+`.mandate/` folder of its own.
 
 ## Owner
 
@@ -29,7 +31,7 @@ Jacob Tonna
 
 2. Create `.mandate/mandates/<Name>.yaml` with the five fields `name`,
    `description` (optional), `rules`, `governs` and `code`, following the
-   shape of `.mandate/mandates/Mandate_Parser.yaml`. Every rule is either `type:
+   shape shown in `README.md` section 4. Every rule is either `type:
    script` with a `run` command, or `type: agent` with a `prompt`. Every path
    listed under a `code` entry's `docs` must name a document present in
    `governs`.
@@ -39,6 +41,9 @@ Jacob Tonna
    ```
    cargo run -- validate .mandate/mandates/<Name>.yaml --root .
    ```
+
+   In an adopting project, the `mandate` binary is run from that project's
+   root with `--root .`.
 
    Exit code `0` with the line `mandate '<name>' is valid: ...` means this
    step is done.
