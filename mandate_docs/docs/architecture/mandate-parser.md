@@ -27,10 +27,11 @@ because there is no use case beyond "parse, then validate".
 | `src/main.rs` | composition root | Collects the process arguments, reads the mandate file, builds an `FsFileTree`, calls `execute`, and maps its exit code to the process exit status. |
 | `src/lib.rs` | composition root | Declares the `adapters` and `domain` modules. |
 
-Dependencies point one way: the adapters and the composition root import the
-domain; the domain imports nothing outside `std`. `FileTree` is a driven
-port because the domain calls it to ask whether a path exists; `src/adapters/cli.rs`
-is the sole driving adapter, since nothing else calls into the crate yet.
+Dependencies point one way: the adapters and the composition root import
+the domain; the domain imports nothing outside `std`. `FileTree` is a
+driven port because the domain calls it to ask whether a path exists;
+`src/adapters/cli.rs` is the sole driving adapter, since nothing else calls
+into the crate yet.
 
 Tests follow the split in `README.md` section 10, step 3:
 
@@ -40,7 +41,7 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private `FakeTree` so the domain test module imports nothing from an adapter. |
 | `tests/file_tree_contract.rs` | integration, contract | One assertion function run against both `InMemoryFileTree` and `FsFileTree`, the latter on a real temporary directory. |
 | `src/adapters/cli.rs` | unit, in-file | Argument parsing and `execute`, using a private fake `FileTree` and in-memory writers. No process is launched. |
-| `tests/fake_repo/mod.rs` | shared helper | An in-memory `FakeRepo` that implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`, plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
+| `tests/fake_virtual_machine/mod.rs` | shared helper | An in-memory `FakeVirtualMachine` that implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`, plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
 | `tests/validation_fixtures.rs` | integration | The root that includes each case's `test.rs`. |
 | `tests/fixtures/validation/<CASE>/test.rs` | integration | One or more tests per case. |
 
@@ -127,10 +128,11 @@ warning rather than an error.
 - `mandate.yaml`, the mandate under test.
 - `test.rs`, the case's own test module.
 
-The test parses the mandate with `fake_repo::parse`, builds a `FakeRepo`
-with every linked file present via `FakeRepo::with_every_file_in`, applies
-the case's edit in code (`remove`, `rename`, or a change to the parsed
-`Mandate` value), then calls `fake_repo::check` and asserts the exact
+The test parses the mandate with `fake_virtual_machine::parse`, builds a
+`FakeVirtualMachine` with every linked file present via
+`FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
+(`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
+`fake_virtual_machine::check` and asserts the exact
 report lines with `assert_passes`, `assert_passes_with_warnings` or
 `assert_fails`. Because the assertion is exact, an unexpected extra line
 fails the test. A case can hold more than one test, and three of the nine
@@ -185,8 +187,9 @@ the mandate file from disk before calling `execute`.
 `cargo test` runs 41 tests: 23 unit tests under `src/` (7 in
 `adapters::cli::tests`, 5 in `adapters::yaml::tests`, 11 in
 `domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 16 in
-the `tests/validation_fixtures.rs` target: 3 unit tests of `FakeRepo` in
-`tests/fake_repo/mod.rs`, 12 tests across the nine cases under
+the `tests/validation_fixtures.rs` target: 3 unit tests of
+`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests
+across the nine cases under
 `tests/fixtures/validation/`, and one guard that every case directory has
 its `#[path]` registration line.
 
@@ -210,6 +213,7 @@ its `#[path]` registration line.
   startup side effects of its own, so no test launches it; `parse_args` and
   `execute` are exercised directly instead.
 - Validation behaviour is proven by fixture directories whose data and a
-  short test decide the outcome, built on one shared fake repository rather
+  short test decide the outcome, built on one shared fake virtual machine
+  rather
   than per-case file listings, so a case is cheap to add and can prove
   several things.

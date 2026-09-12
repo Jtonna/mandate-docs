@@ -39,7 +39,11 @@ repository does not yet carry one (see section 3):
   },
 
   "docs_code": {
-    "NoZvYf6I": ["AGp11cEp", "0HYahGqe", "9O0dF9vv", "dmgg5Era", "oYrdLikO", "uhWvYLkM", "j70aaooT", "1heIzw3j", "2rXErShe", "JTBXrGc3", "r7yc78R9"],
+    "NoZvYf6I": [
+      "AGp11cEp", "0HYahGqe", "9O0dF9vv", "dmgg5Era", "oYrdLikO",
+      "uhWvYLkM", "j70aaooT", "1heIzw3j", "2rXErShe", "JTBXrGc3",
+      "r7yc78R9"
+    ],
     "vX2qsQpN": ["0HYahGqe", "j70aaooT", "1heIzw3j"]
   }
 }
@@ -160,8 +164,8 @@ to both rule sets.
 ## 2. Coverage is computed, not recorded
 
 `mandate.json` holds the minimum data needed to rebuild the database, ordered
-for human scanning. Anything derivable from that data is left out of the file
-and computed on load.
+for human scanning. Anything derivable from that data is left out of the
+file and computed on load.
 
 Two things are derived rather than stored:
 
@@ -197,7 +201,8 @@ has none:
 
 ```
 README.md                     this document
-Cargo.toml                    the Rust crate; unit tests in src/, integration tests in tests/
+Cargo.toml                    the Rust crate; unit tests in src/,
+                              integration tests in tests/
 docs/
   architecture/
     PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
@@ -206,7 +211,8 @@ docs/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
 tests/                        integration tests: port contracts, fixture cases
-  fake_repo/                  the fake repository every fixture case builds on
+  tests/fake_virtual_machine/  the fake virtual machine every fixture case
+                              builds on
   fixtures/
     validation/                one directory per case: mandate.yaml and test.rs
 ```
@@ -388,14 +394,14 @@ nothing checks them yet.
 
 ### What is not yet defined about validity
 
-The rules above constrain a mandate. Nothing yet defines what a loader does when
-`mandate.json` is internally inconsistent, which is the likelier case since it is
-generated and hand-editable:
+The rules above constrain a mandate. Nothing yet defines what a loader does
+when `mandate.json` is internally inconsistent, which is the likelier case
+since it is generated and hand-editable:
 
 - A rule id in `mandates_docs` that the mandate does not define.
 - A junction table referencing an ID absent from its index.
-- A `mandates` entry whose file no longer exists, which is exactly the state left
-  behind when a mandate is deleted.
+- A `mandates` entry whose file no longer exists, which is exactly the state
+  left behind when a mandate is deleted.
 
 Reject the file, drop the offending entry, or load what parses and report the
 rest: all three are defensible and none is chosen. A loader has to pick one, so
@@ -541,18 +547,19 @@ Four alternatives were considered and rejected:
 
 Random IDs avoid all four failure modes without bookkeeping:
 
-- **Rename-stable:** The ID is not a function of the path, so the path can change
-  freely.
+- **Rename-stable:** The ID is not a function of the path, so the path can
+  change freely.
 - **Short:** 8 characters against a UUID's 36.
 - **Stateless:** No counter to persist, no tombstones to carry.
-- **Effectively collision-free:** 62 to the 8th power is about 218 trillion. At
-  1,000 files the odds of any collision are about 2 in a billion.
+- **Effectively collision-free:** 62 to the 8th power is about 218 trillion.
+  At 1,000 files the odds of any collision are about 2 in a billion.
 
-The cost is that a random ID does not sort or read as well as `001` when scanning
-by eye. This is acceptable: the tables are separated by type, so position already
-tells you what you are looking at, and `mandate.json` is meant to be generated
-rather than hand-edited. The IDs in the example `mandate.json` above were
-minted by hand from a random source, since no generator exists yet.
+The cost is that a random ID does not sort or read as well as `001` when
+scanning by eye. This is acceptable: the tables are separated by type, so
+position already tells you what you are looking at, and `mandate.json` is
+meant to be generated rather than hand-edited. The IDs in the example
+`mandate.json` above were minted by hand from a random source, since no
+generator exists yet.
 
 ---
 
@@ -699,10 +706,11 @@ gain startup side effects.
 Tests never read `docs/`, and this repository has no `.mandate/`. A test
 that needs a mandate or a file tree gets it from `tests/fixtures/`. Each
 fixture case is a directory named `<CHECK>_PASS<n>` or `<CHECK>_FAIL<n>`
-holding `mandate.yaml` and a `test.rs`; the test builds a fake repository
-from the mandate with the shared helper in `tests/fake_repo/`, adds, removes
-or renames files, and asserts the exact report, so the name says what is
-proven and the case can prove several things.
+holding `mandate.yaml` and a `test.rs`; the test builds a fake virtual
+machine from the mandate with the shared helper in
+`tests/fake_virtual_machine/`, adds, removes or renames files, and asserts
+the exact report, so the name says what is proven and the case can prove
+several things.
 
 Output: the diff and a green suite. The test command and its output are kept
 for step 7.
@@ -823,10 +831,10 @@ should be built until the functional prototype works end to end.
 
 ### ID collision guard
 
-The generator must check a newly minted ID against existing keys in its table
-and regenerate on a hit. The odds are around 2 in a billion at this scale, so it
-will not trigger at this scale, but the guard is three lines and removes the need
-to ever reason about it again.
+The generator must check a newly minted ID against existing keys in its
+table and regenerate on a hit. The odds are around 2 in a billion at this
+scale, so it will not trigger at this scale, but the guard is three lines
+and removes the need to ever reason about it again.
 
 ### Content hashes and drift detection
 
@@ -853,9 +861,9 @@ Candidate states, if pursued: `verified`, `doc-drift`, `code-drift`,
 
 ### Rename and move recovery
 
-Random IDs mean a move never breaks a mapping, but the stored path does become
-wrong. Git can identify the new location without any of that data living in
-`mandate.json`:
+Random IDs mean a move never breaks a mapping, but the stored path does
+become wrong. Git can identify the new location without any of that data
+living in `mandate.json`:
 
 ```bash
 git diff -M --name-status <old-ref> <new-ref>
@@ -863,18 +871,18 @@ git diff -M --name-status <old-ref> <new-ref>
 ```
 
 Git recomputes renames heuristically at diff time by fingerprinting files in
-small chunks and scoring their similarity. It abandons this detection entirely
-past a configurable candidate limit (`diff.renameLimit`), so very large refactors
-report plain adds and deletes instead. The fallback is a human correcting one
-path field.
+small chunks and scoring their similarity. It abandons this detection
+entirely past a configurable candidate limit (`diff.renameLimit`), so very
+large refactors report plain adds and deletes instead. The fallback is a
+human correcting one path field.
 
 ### Splitting intent from resolved state
 
 If concurrent branches become common, hashes and audit data should move to a
 separate `mandate.lock.json`, leaving `mandate.json` as the human-and-agent
-edited declaration. The reason is merge conflicts: generated data conflicts on
-every parallel branch and is regenerable, so it belongs in a file you can resolve
-by discarding and re-locking.
+edited declaration. The reason is merge conflicts: generated data conflicts
+on every parallel branch and is regenerable, so it belongs in a file you can
+resolve by discarding and re-locking.
 
 The current single-file layout keeps this cheap by confining anything
 machine-written to its own subtree, so the split is a move rather than a
@@ -882,10 +890,10 @@ redesign.
 
 ### Sub-file anchors
 
-Whole-file granularity means an unrelated typo fix in a long document marks every
-mapping on it as changed. Optional anchors (a heading for a document, a symbol
-or line range for code) would scope that. The cost is a parser per language and
-anchors that themselves go out of date.
+Whole-file granularity means an unrelated typo fix in a long document marks
+every mapping on it as changed. Optional anchors (a heading for a document,
+a symbol or line range for code) would scope that. The cost is a parser per
+language and anchors that themselves go out of date.
 
 If pursued, add the field to the schema before it is needed. Ignoring an unused
 key is free; introducing one later is a migration.
@@ -916,18 +924,19 @@ denominator, and the denominator is whatever the scan decided to index.
 
 ### The rule execution contract
 
-A rule declares `run` or `prompt` and nothing else. How either is invoked is
-undefined:
+A rule declares `run` or `prompt` and nothing else. How either is invoked
+is undefined:
 
-- What `run: ./scripts/mandate/check-owner.sh` is relative to. Every path in the
-  format resolves from the repository root, but a leading `./` conventionally
-  reads as the current directory, and no `scripts/` folder exists in this
-  repository.
-- What a rule receives. Paths, file contents, both, on stdin, as arguments, as
-  environment. A `type: agent` rule needs the linked documents and source files
-  in its context; the format says the linkage exists and not how it is delivered.
-- What a rule returns beyond a script's exit code. An agent reports findings, and
-  nothing defines their shape.
+- What `run: ./scripts/mandate/check-owner.sh` is relative to. Every path
+  in the format resolves from the repository root, but a leading `./`
+  conventionally reads as the current directory, and no `scripts/` folder
+  exists in this repository.
+- What a rule receives. Paths, file contents, both, on stdin, as arguments,
+  as environment. A `type: agent` rule needs the linked documents and
+  source files in its context; the format says the linkage exists and not
+  how it is delivered.
+- What a rule returns beyond a script's exit code. An agent reports
+  findings, and nothing defines their shape.
 
 Nothing executes rules yet, so none of this blocks the current stage. It is the
 first thing that must be specified when execution is built.
@@ -965,9 +974,9 @@ present. No reporting is built.
 
 ### Audit trail
 
-No record currently exists of when the file was last locked or synced, by which
-tool version, or by whom. This belongs with the lock-file split rather than being
-added to the current structure.
+No record currently exists of when the file was last locked or synced, by
+which tool version, or by whom. This belongs with the lock-file split
+rather than being added to the current structure.
 
 ### Documentation coverage reporting
 

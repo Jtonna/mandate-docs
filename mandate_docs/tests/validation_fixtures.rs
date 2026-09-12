@@ -1,9 +1,9 @@
 //! Fixture-driven validation tests. Each case under
 //! `tests/fixtures/validation/<CASE>/` carries its own `mandate.yaml` and
-//! `test.rs`, using the shared [`fake_repo`] helpers to build an in-memory
+//! `test.rs`, using the shared [`fake_virtual_machine`] helpers to build an in-memory
 //! repository and check the rendered report against expectations.
 
-mod fake_repo;
+mod fake_virtual_machine;
 
 /// Every case directory under `tests/fixtures/validation/` that is wired up
 /// below with a `#[path]` mod line. Kept next to those lines so the two stay

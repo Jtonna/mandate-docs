@@ -1,4 +1,4 @@
-//! A shared in-memory fake repository for the validation fixture tests.
+//! A shared in-memory fake virtual machine for the validation fixture tests.
 //!
 //! Each fixture case builds one of these to represent "what files exist on
 //! disk" and hands it straight to `validate` (it implements `FileTree`
@@ -14,55 +14,55 @@ use mandate::domain::ports::file_tree::FileTree;
 use mandate::domain::validation::validate;
 
 /// An in-memory set of repository-relative paths.
-pub struct FakeRepo {
+pub struct FakeVirtualMachine {
     paths: HashSet<String>,
 }
 
-impl FakeRepo {
-    /// A repository with no files at all.
+impl FakeVirtualMachine {
+    /// A virtual machine with no files at all.
     pub fn empty() -> Self {
         Self {
             paths: HashSet::new(),
         }
     }
 
-    /// A repository that already has every document `mandate` governs and
-    /// every source file `mandate` links, i.e. a repo that should pass
-    /// validation as far as file presence goes.
+    /// A virtual machine that already has every document `mandate` governs
+    /// and every source file `mandate` links, i.e. a machine that should
+    /// pass validation as far as file presence goes.
     pub fn with_every_file_in(mandate: &Mandate) -> Self {
-        let mut repo = Self::empty();
+        let mut vm = Self::empty();
         for governed in &mandate.governs {
-            repo = repo.add(&governed.doc);
+            vm = vm.add(&governed.doc);
         }
         for code in &mandate.code {
-            repo = repo.add(&code.path);
+            vm = vm.add(&code.path);
         }
-        repo
+        vm
     }
 
-    /// Adds `path` to the repository.
+    /// Adds `path` to the virtual machine.
     pub fn add(mut self, path: impl Into<String>) -> Self {
         self.paths.insert(path.into());
         self
     }
 
-    /// Removes `path` from the repository. Panics if `path` is absent, to
-    /// catch a typo in a fixture case rather than silently doing nothing.
+    /// Removes `path` from the virtual machine. Panics if `path` is absent,
+    /// to catch a typo in a fixture case rather than silently doing nothing.
     pub fn remove(mut self, path: &str) -> Self {
         if !self.paths.remove(path) {
-            panic!("FakeRepo::remove: '{path}' is not present");
+            panic!("FakeVirtualMachine::remove: '{path}' is not present");
         }
         self
     }
 
     /// Moves `from` to `to`. Panics if `from` is absent.
     pub fn rename(self, from: &str, to: impl Into<String>) -> Self {
-        let repo = self.remove(from);
-        repo.add(to)
+        let vm = self.remove(from);
+        vm.add(to)
     }
 }
 
-impl FileTree for FakeRepo {
+impl FileTree for FakeVirtualMachine {
     fn exists(&self, repo_relative_path: &str) -> bool {
         self.paths.contains(repo_relative_path)
     }
@@ -75,11 +75,11 @@ pub fn parse(yaml: &str) -> Mandate {
     parse_mandate(yaml).unwrap_or_else(|e| panic!("mandate.yaml failed to parse: {e}"))
 }
 
-/// Validates `mandate` against `repo` and renders the report exactly as the
+/// Validates `mandate` against `vm` and renders the report exactly as the
 /// CLI prints it (`error: <Display>` / `warning: <Display>`), sorted so
 /// comparisons are order-independent.
-pub fn check(mandate: &Mandate, repo: &FakeRepo) -> Vec<String> {
-    let report = validate(mandate, repo);
+pub fn check(mandate: &Mandate, vm: &FakeVirtualMachine) -> Vec<String> {
+    let report = validate(mandate, vm);
     let mut lines: Vec<String> = report
         .errors
         .iter()
@@ -145,26 +145,26 @@ mod tests {
     #[test]
     fn with_every_file_in_makes_a_mandate_pass() {
         let mandate = mandate();
-        let repo = FakeRepo::with_every_file_in(&mandate);
+        let vm = FakeVirtualMachine::with_every_file_in(&mandate);
 
-        let lines = check(&mandate, &repo);
+        let lines = check(&mandate, &vm);
 
         assert_passes(lines);
     }
 
     #[test]
-    #[should_panic]
-    fn remove_of_a_missing_path_panics() {
-        FakeRepo::empty().remove("docs/does-not-exist.md");
+    #[should_panic(expected = "is not present")]
+    fn remove_of_a_missing_path_panics_naming_the_path() {
+        FakeVirtualMachine::empty().remove("docs/does-not-exist.md");
     }
 
     #[test]
     fn rename_moves_the_path() {
-        let repo = FakeRepo::empty()
+        let vm = FakeVirtualMachine::empty()
             .add("docs/a.md")
             .rename("docs/a.md", "docs/b.md");
 
-        assert!(!repo.exists("docs/a.md"));
-        assert!(repo.exists("docs/b.md"));
+        assert!(!vm.exists("docs/a.md"));
+        assert!(vm.exists("docs/b.md"));
     }
 }

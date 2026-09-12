@@ -1,16 +1,16 @@
-use crate::fake_repo::*;
+use crate::fake_virtual_machine::*;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 
 #[test]
 fn wrong_case_path_fails() {
     let mandate = parse(MANDATE);
-    let repo = FakeRepo::with_every_file_in(&mandate).rename(
+    let vm = FakeVirtualMachine::with_every_file_in(&mandate).rename(
         "docs/sop/handling-mandates.md",
         "docs/sop/Handling-Mandates.md",
     );
 
-    let lines = check(&mandate, &repo);
+    let lines = check(&mandate, &vm);
 
     assert_fails(
         lines,
@@ -21,9 +21,9 @@ fn wrong_case_path_fails() {
 #[test]
 fn exact_lowercase_path_passes() {
     let mandate = parse(MANDATE);
-    let repo = FakeRepo::with_every_file_in(&mandate);
+    let vm = FakeVirtualMachine::with_every_file_in(&mandate);
 
-    let lines = check(&mandate, &repo);
+    let lines = check(&mandate, &vm);
 
     assert_passes(lines);
 }
