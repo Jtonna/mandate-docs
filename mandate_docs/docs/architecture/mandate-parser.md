@@ -107,8 +107,8 @@ found. `report.is_valid()` is `true` exactly when `errors` is empty;
 errors first in validator order, then warnings, each prefixed `error: ` or
 `warning: ` and using the `Display` text in the table below. The CLI's
 `execute` writes those lines as they are, and the fixture helper's `check`
-sorts them for order-independent assertions, so the printed format is
-defined in one place.
+returns them unchanged, so the printed format and its order are defined
+in one place and every fixture case asserts exactly what a user would see.
 
 | Variant | Message printed | Meaning |
 |---|---|---|
@@ -139,8 +139,10 @@ The test parses the mandate with `fake_virtual_machine::parse`, builds a
 `FakeVirtualMachine` with every linked file present via
 `FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
 (`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
-`fake_virtual_machine::check`, which calls `validate`, takes
-`ValidationReport::lines`, and sorts them for order-independent assertions.
+`fake_virtual_machine::check`, which calls `validate` and returns
+`ValidationReport::lines` unchanged, so a case asserts the lines in
+validator order: errors first, following the mandate's own order of
+`rules`, `governs` and `code`, then warnings.
 Then the test asserts the result with `assert_passes`,
 `assert_passes_with_warnings` or `assert_fails`. Because the assertion is
 exact, an unexpected extra line

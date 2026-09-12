@@ -75,13 +75,10 @@ pub fn parse(yaml: &str) -> Mandate {
     parse_mandate(yaml).unwrap_or_else(|e| panic!("mandate.yaml failed to parse: {e}"))
 }
 
-/// Validates `mandate` against `vm` and renders the report exactly as the
-/// CLI prints it (via [`ValidationReport::lines`]), sorted so comparisons
-/// are order-independent.
+/// Validates `mandate` against `vm` and returns the report lines exactly as
+/// the CLI prints them, in validator order (see `ValidationReport::lines`).
 pub fn check(mandate: &Mandate, vm: &FakeVirtualMachine) -> Vec<String> {
-    let mut lines = validate(mandate, vm).lines();
-    lines.sort();
-    lines
+    validate(mandate, vm).lines()
 }
 
 /// Asserts `lines` (as returned by [`check`]) reports no problems at all.
@@ -93,19 +90,17 @@ pub fn assert_passes(lines: Vec<String>) {
     );
 }
 
-/// Asserts `lines` reports no errors, and exactly the given warnings
-/// (order-independent).
+/// Asserts `lines` reports no errors, and exactly the given warnings. Order
+/// must match the validator's order: errors first, then warnings.
 pub fn assert_passes_with_warnings(lines: Vec<String>, warnings: &[&str]) {
-    let mut expected: Vec<String> = warnings.iter().map(|w| format!("warning: {w}")).collect();
-    expected.sort();
+    let expected: Vec<String> = warnings.iter().map(|w| format!("warning: {w}")).collect();
     assert_eq!(lines, expected);
 }
 
-/// Asserts `lines` reports exactly the given errors (order-independent) and
-/// nothing else.
+/// Asserts `lines` reports exactly the given errors and nothing else. Order
+/// must match the validator's order: errors first, then warnings.
 pub fn assert_fails(lines: Vec<String>, errors: &[&str]) {
-    let mut expected: Vec<String> = errors.iter().map(|e| format!("error: {e}")).collect();
-    expected.sort();
+    let expected: Vec<String> = errors.iter().map(|e| format!("error: {e}")).collect();
     assert_eq!(lines, expected);
 }
 
