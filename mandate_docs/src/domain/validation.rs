@@ -65,6 +65,16 @@ impl ValidationReport {
     pub fn is_valid(&self) -> bool {
         self.errors.is_empty()
     }
+
+    /// The report rendered one line per finding, errors first in validator
+    /// order, then warnings, each prefixed `error: ` or `warning: `.
+    pub fn lines(&self) -> Vec<String> {
+        self.errors
+            .iter()
+            .map(|e| format!("error: {e}"))
+            .chain(self.warnings.iter().map(|w| format!("warning: {w}")))
+            .collect()
+    }
 }
 
 pub fn validate(mandate: &Mandate, tree: &dyn FileTree) -> ValidationReport {
@@ -366,6 +376,30 @@ mod tests {
             }
             .to_string(),
             "rule 'x' is defined but no document references it"
+        );
+    }
+
+    #[test]
+    fn report_lines_are_errors_then_warnings_in_validator_order() {
+        let report = ValidationReport {
+            errors: vec![
+                ValidationError::NoRules,
+                ValidationError::DuplicateRuleId {
+                    id: "x".to_string(),
+                },
+            ],
+            warnings: vec![ValidationWarning::UnreferencedRule {
+                id: "y".to_string(),
+            }],
+        };
+
+        assert_eq!(
+            report.lines(),
+            vec![
+                "error: no rules defined; a mandate needs at least one".to_string(),
+                "error: duplicate rule id 'x'".to_string(),
+                "warning: rule 'y' is defined but no document references it".to_string(),
+            ]
         );
     }
 }

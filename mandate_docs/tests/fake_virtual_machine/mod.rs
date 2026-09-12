@@ -76,16 +76,10 @@ pub fn parse(yaml: &str) -> Mandate {
 }
 
 /// Validates `mandate` against `vm` and renders the report exactly as the
-/// CLI prints it (`error: <Display>` / `warning: <Display>`), sorted so
-/// comparisons are order-independent.
+/// CLI prints it (via [`ValidationReport::lines`]), sorted so comparisons
+/// are order-independent.
 pub fn check(mandate: &Mandate, vm: &FakeVirtualMachine) -> Vec<String> {
-    let report = validate(mandate, vm);
-    let mut lines: Vec<String> = report
-        .errors
-        .iter()
-        .map(|e| format!("error: {e}"))
-        .chain(report.warnings.iter().map(|w| format!("warning: {w}")))
-        .collect();
+    let mut lines = validate(mandate, vm).lines();
     lines.sort();
     lines
 }

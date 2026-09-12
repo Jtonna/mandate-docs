@@ -18,7 +18,7 @@ because there is no use case beyond "parse, then validate".
 | File | Layer | Role |
 |---|---|---|
 | `src/domain/mandate.rs` | domain | Plain data types for a mandate: `Mandate`, `Rule`, `RuleKind`, `GovernedDoc`, `CodeLink`. No serde, no I/O. |
-| `src/domain/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `FileTree`. |
+| `src/domain/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `FileTree`. `ValidationReport::lines` renders the report one line per finding. |
 | `src/domain/ports/file_tree.rs` | port | The `FileTree` trait the domain depends on. |
 | `src/adapters/yaml.rs` | driven adapter | `parse_mandate` and `ParseError`. Turns mandate YAML text into a `Mandate`. |
 | `src/adapters/memory_tree.rs` | driven adapter | `InMemoryFileTree`, a `FileTree` backed by a set of paths. |
@@ -103,6 +103,13 @@ pass: every check in the function runs regardless of what earlier checks
 found. `report.is_valid()` is `true` exactly when `errors` is empty;
 `warnings` never affects it.
 
+`ValidationReport::lines` renders the report as one string per finding,
+errors first in validator order, then warnings, each prefixed `error: ` or
+`warning: ` and using the `Display` text in the table below. The CLI's
+`execute` writes those lines as they are, and the fixture helper's `check`
+sorts them for order-independent assertions, so the printed format is
+defined in one place.
+
 | Variant | Message printed | Meaning |
 |---|---|---|
 | `ValidationError::NoRules` | `no rules defined; a mandate needs at least one` | `rules` is empty. |
@@ -132,9 +139,11 @@ The test parses the mandate with `fake_virtual_machine::parse`, builds a
 `FakeVirtualMachine` with every linked file present via
 `FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
 (`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
-`fake_virtual_machine::check` and asserts the exact
-report lines with `assert_passes`, `assert_passes_with_warnings` or
-`assert_fails`. Because the assertion is exact, an unexpected extra line
+`fake_virtual_machine::check`, which calls `validate`, takes
+`ValidationReport::lines`, and sorts them for order-independent assertions.
+Then the test asserts the result with `assert_passes`,
+`assert_passes_with_warnings` or `assert_fails`. Because the assertion is
+exact, an unexpected extra line
 fails the test. A case can hold more than one test, and three of the nine
 do. Registering a case means adding one `#[path]` line to
 `tests/validation_fixtures.rs`, naming the case's `test.rs`. A test in that
@@ -184,14 +193,13 @@ and exits `0`. On any validation error, `execute` prints the `error:` and
 that can print `failed to read '<path>': <os error>`, since only it reads
 the mandate file from disk before calling `execute`.
 
-`cargo test` runs 41 tests: 23 unit tests under `src/` (7 in
-`adapters::cli::tests`, 5 in `adapters::yaml::tests`, 11 in
+`cargo test` runs 42 tests: 24 unit tests under `src/` (7 in
+`adapters::cli::tests`, 5 in `adapters::yaml::tests`, 12 in
 `domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 16 in
 the `tests/validation_fixtures.rs` target: 3 unit tests of
-`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests
-across the nine cases under
-`tests/fixtures/validation/`, and one guard that every case directory has
-its `#[path]` registration line.
+`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests across
+the nine cases under `tests/fixtures/validation/`, and one guard that every
+case directory has its `#[path]` registration line.
 
 ## Decisions
 

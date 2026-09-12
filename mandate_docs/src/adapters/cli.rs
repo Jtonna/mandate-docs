@@ -53,11 +53,8 @@ pub fn execute(
 
     let report = validate(&mandate, tree);
 
-    for error in &report.errors {
-        let _ = writeln!(out, "error: {error}");
-    }
-    for warning in &report.warnings {
-        let _ = writeln!(out, "warning: {warning}");
+    for line in report.lines() {
+        let _ = writeln!(out, "{line}");
     }
 
     if report.is_valid() {
