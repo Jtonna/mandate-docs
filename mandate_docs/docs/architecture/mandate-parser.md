@@ -42,7 +42,8 @@ Tests follow the split in `README.md` section 10, step 3:
 | `tests/file_tree_contract.rs` | integration, contract | One assertion function run against both `InMemoryFileTree` and `FsFileTree`, the latter on a real temporary directory. |
 | `src/adapters/cli.rs` | unit, in-file | Argument parsing and `execute`, using a private fake `FileTree` and in-memory writers. No process is launched. |
 | `tests/fake_virtual_machine/mod.rs` | shared helper | An in-memory `FakeVirtualMachine` that implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`, plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
-| `tests/validation_fixtures.rs` | integration | The root that includes each case's `test.rs`. |
+| `tests/validation_fixtures.rs` | integration | The root of the fixture cases. It includes a module list that `build.rs` generates at compile time from the case directories. |
+| `build.rs` | build script | Scans `tests/fixtures/validation/` and writes one `#[path]` module declaration per case directory that holds a `test.rs`. Fails the build on a case directory without one. Also fails the build when two directory names collide after lowercasing, and writes the list of directories it found so the root can check it. |
 | `tests/fixtures/validation/<CASE>/test.rs` | integration | One or more tests per case. |
 
 Tests never read `docs/`, and no test runs the built binary. This repository
@@ -145,12 +146,18 @@ validator order: errors first, following the mandate's own order of
 `rules`, `governs` and `code`, then warnings.
 Then the test asserts the result with `assert_passes`,
 `assert_passes_with_warnings` or `assert_fails`. Because the assertion is
-exact, an unexpected extra line
-fails the test. A case can hold more than one test, and three of the nine
-do. Registering a case means adding one `#[path]` line to
-`tests/validation_fixtures.rs`, naming the case's `test.rs`. A test in that
-file reads the case directories and fails if any directory has no
-registration line, or any registered name has no directory.
+exact, an unexpected extra line fails the test. A case can hold more than
+one test, and three of the nine do.
+A case is registered by creating its directory. `build.rs` scans the
+directory at compile time and generates a `#[path]` module declaration for
+every case that holds a `test.rs`, so there is no list to keep in step and
+a new case is picked up on the next build. A case directory without a
+`test.rs` fails the build. Cargo does not always notice an empty new
+directory or a deleted one, so the generated file also carries the list of
+directories the script found, and one test in `tests/validation_fixtures.rs`
+compares that list with the directories on disk. When they differ, the test
+fails naming the difference and says to run `cargo clean -p mandate` or
+touch `build.rs`.
 
 Each `mandate.yaml` is an independent copy, edited only where the case
 needs it; there is nothing else it is kept in sync with.
@@ -199,9 +206,9 @@ the mandate file from disk before calling `execute`.
 `adapters::cli::tests`, 5 in `adapters::yaml::tests`, 12 in
 `domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 16 in
 the `tests/validation_fixtures.rs` target: 3 unit tests of
-`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests across
-the nine cases under `tests/fixtures/validation/`, and one guard that every
-case directory has its `#[path]` registration line.
+`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests
+across the nine cases under `tests/fixtures/validation/`, and one check
+that the generated case list matches the directories on disk.
 
 ## Decisions
 
