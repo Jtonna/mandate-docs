@@ -57,13 +57,6 @@ rules:
       and its exit codes match what the document says. Report each mismatch,
       quoting the document line and the source line.
 
-  - id: unused-rule
-    type: agent
-    description: Fixture-only rule, defined but referenced by no document.
-    prompt: >
-      This rule exists only to exercise the unreferenced-rule warning; it is
-      never assigned to a document.
-
 # The documents this mandate governs, and which rules apply to each.
 # Paths are relative to the repository root. Markdown files in this repository
 # only; external documentation is not supported.
@@ -71,6 +64,7 @@ governs:
   - doc: docs/architecture/mandate-parser.md
     rules:
       - claims-match-code
+      - no-such-rule
 
   - doc: docs/sop/handling-mandates.md
     rules:
@@ -120,10 +114,10 @@ code:
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/common/mod.rs
+  - path: tests/fixtures/support.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/validation_fixtures.rs
+  - path: tests/fixtures/doc_missing/mod.rs
     docs:
       - docs/architecture/mandate-parser.md

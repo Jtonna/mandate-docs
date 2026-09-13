@@ -1,9 +1,9 @@
-use crate::fake_virtual_machine::*;
+use crate::support::*;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 
 #[test]
-fn missing_governed_doc_fails() {
+fn fails_when_a_governed_doc_is_missing() {
     let mandate = parse(MANDATE);
     let vm =
         FakeVirtualMachine::with_every_file_in(&mandate).remove("docs/sop/handling-mandates.md");
@@ -17,7 +17,7 @@ fn missing_governed_doc_fails() {
 }
 
 #[test]
-fn adding_the_file_back_passes() {
+fn passes_once_the_doc_is_added_back() {
     let mandate = parse(MANDATE);
     let vm = FakeVirtualMachine::with_every_file_in(&mandate)
         .remove("docs/sop/handling-mandates.md")

@@ -30,8 +30,8 @@ The folder holds the first real software, a Rust crate that parses a mandate
 and validates it, and the documentation for it under `docs/`. There is no
 `.mandate/` folder here, because that folder belongs to a project that has
 mandate installed, and this repository does not yet run mandate on itself.
-Test data lives under `mandate_docs/tests/fixtures/`. Nothing runs a rule
-yet.
+Test data lives beside each test under `mandate_docs/tests/fixtures/`.
+Nothing runs a rule yet.
 
 [`mandate_docs/README.md`](mandate_docs/README.md) is the specification: the file
 format, the reasoning behind each decision, and an explicit list of what has been

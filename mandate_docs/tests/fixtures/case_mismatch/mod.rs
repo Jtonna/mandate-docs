@@ -1,9 +1,9 @@
-use crate::fake_virtual_machine::*;
+use crate::support::*;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 
 #[test]
-fn wrong_case_path_fails() {
+fn fails_when_only_the_case_differs() {
     let mandate = parse(MANDATE);
     let vm = FakeVirtualMachine::with_every_file_in(&mandate).rename(
         "docs/sop/handling-mandates.md",
@@ -19,7 +19,7 @@ fn wrong_case_path_fails() {
 }
 
 #[test]
-fn exact_lowercase_path_passes() {
+fn passes_with_the_exact_path() {
     let mandate = parse(MANDATE);
     let vm = FakeVirtualMachine::with_every_file_in(&mandate);
 

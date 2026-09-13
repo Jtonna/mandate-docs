@@ -113,10 +113,10 @@ code:
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/common/mod.rs
+  - path: tests/fixtures/support.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/validation_fixtures.rs
+  - path: tests/fixtures/doc_missing/mod.rs
     docs:
       - docs/architecture/mandate-parser.md

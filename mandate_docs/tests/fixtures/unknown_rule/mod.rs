@@ -1,9 +1,9 @@
-use crate::fake_virtual_machine::*;
+use crate::support::*;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 
 #[test]
-fn unknown_rule_reference_fails() {
+fn fails_when_a_document_references_an_undefined_rule() {
     let mandate = parse(MANDATE);
     let vm = FakeVirtualMachine::with_every_file_in(&mandate);
 

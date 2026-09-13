@@ -41,10 +41,8 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private `FakeTree` so the domain test module imports nothing from an adapter. |
 | `tests/file_tree_contract.rs` | integration, contract | One assertion function run against both `InMemoryFileTree` and `FsFileTree`, the latter on a real temporary directory. |
 | `src/adapters/cli.rs` | unit, in-file | Argument parsing and `execute`, using a private fake `FileTree` and in-memory writers. No process is launched. |
-| `tests/fake_virtual_machine/mod.rs` | shared helper | An in-memory `FakeVirtualMachine` that implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`, plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
-| `tests/validation_fixtures.rs` | integration | The root of the fixture cases. It includes a module list that `build.rs` generates at compile time from the case directories. |
-| `build.rs` | build script | Scans `tests/fixtures/validation/` and writes one `#[path]` module declaration per case directory that holds a `test.rs`. Fails the build on a case directory without one. Also fails the build when two directory names collide after lowercasing, and writes the list of directories it found so the root can check it. |
-| `tests/fixtures/validation/<CASE>/test.rs` | integration | One or more tests per case. |
+| `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
+| `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 
 Tests never read `docs/`, and no test runs the built binary. This repository
 has no `.mandate/` folder to read.
@@ -130,49 +128,46 @@ warning rather than an error.
 
 ## Fixture cases
 
-`tests/fixtures/validation/` holds one directory per case, named
-`<CHECK>_PASS<n>` or `<CHECK>_FAIL<n>`. Each directory holds two files:
+`tests/fixtures/` holds one test target, `main.rs`, which declares a private
+`support` module and one `mod <case>;` line per case. Adding a case means
+creating its directory and adding that one line, the same way `src/`
+declares its own modules; this is acceptable because `mod` is Rust's
+module tree, not a registry the project maintains on the side.
+
+Each case is a directory under `tests/fixtures/`, named for the check it
+proves, holding two files:
 
 - `mandate.yaml`, the mandate under test.
-- `test.rs`, the case's own test module.
+- `mod.rs`, the case's own test module, starting with
+  `use crate::support::*;` and `include_str!("mandate.yaml")`.
 
-The test parses the mandate with `fake_virtual_machine::parse`, builds a
-`FakeVirtualMachine` with every linked file present via
-`FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
-(`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
-`fake_virtual_machine::check`, which calls `validate` and returns
-`ValidationReport::lines` unchanged, so a case asserts the lines in
+The test parses the mandate with `parse`, builds a `FakeVirtualMachine`
+with every linked file present via `FakeVirtualMachine::with_every_file_in`,
+applies the case's edit in code (`remove`, `rename`, or a change to the
+parsed `Mandate` value), then calls `check`, which calls `validate` and
+returns `ValidationReport::lines` unchanged, so a case asserts the lines in
 validator order: errors first, following the mandate's own order of
 `rules`, `governs` and `code`, then warnings.
 Then the test asserts the result with `assert_passes`,
 `assert_passes_with_warnings` or `assert_fails`. Because the assertion is
-exact, an unexpected extra line fails the test. A case can hold more than
-one test, and three of the nine do.
-A case is registered by creating its directory. `build.rs` scans the
-directory at compile time and generates a `#[path]` module declaration for
-every case that holds a `test.rs`, so there is no list to keep in step and
-a new case is picked up on the next build. A case directory without a
-`test.rs` fails the build. Cargo does not always notice an empty new
-directory or a deleted one, so the generated file also carries the list of
-directories the script found, and one test in `tests/validation_fixtures.rs`
-compares that list with the directories on disk. When they differ, the test
-fails naming the difference and says to run `cargo clean -p mandate` or
-touch `build.rs`.
+exact, an unexpected extra line fails the test. Pass or fail is in each
+test function's name, and a case can hold more than one test; three of
+the nine do.
 
 Each `mandate.yaml` is an independent copy, edited only where the case
 needs it; there is nothing else it is kept in sync with.
 
 | Case | What the test does | Proves |
 |---|---|---|
-| `ALL_LINKS_PRESENT_PASS1` | Parses the mandate, builds a repo with every linked file present, and checks the report is empty. | An unedited mandate with every file present validates clean. |
-| `CASE_MISMATCH_FAIL1` | Two tests. One renames `docs/sop/handling-mandates.md` to `docs/sop/Handling-Mandates.md` in the repo and asserts `governed document not found: docs/sop/handling-mandates.md`. The other checks the unedited repo, with the lowercase path present, passes. | Matching is case-sensitive. Chosen because Linux allows two names differing only by case in one directory, while Windows and macOS refuse it by default, so exact matching is the only behaviour that is the same on all three. |
-| `CODE_MISSING_FAIL1` | Removes `src/main.rs` and `tests/validation_fixtures.rs` from the repo and asserts both `missing source file:` lines. | `ValidationError::CodeMissing` fires once per missing source file. |
-| `DOC_MISSING_FAIL1` | Two tests. One removes `docs/sop/handling-mandates.md` from the repo and asserts `governed document not found: docs/sop/handling-mandates.md`. The other removes it and adds it back, and asserts the report is empty. | `ValidationError::DocMissing` fires for a governed document absent from the repo, and clears once the file is present again. |
-| `DUPLICATE_RULE_FAIL1` | The mandate's `rules` list has a second entry with id `claims-match-code`; the test asserts `duplicate rule id 'claims-match-code'`. | `ValidationError::DuplicateRuleId` fires on a repeated id. |
-| `NO_RULES_FAIL1` | The mandate's `rules` list is empty, and every `governs` entry's `rules` list is empty with it; the test asserts `no rules defined; a mandate needs at least one`. | `ValidationError::NoRules` fires when a mandate defines no rules at all. |
-| `UNGOVERNED_DOC_FAIL1` | The `code` entry for `src/domain/mandate.rs` gains a `docs` reference to `docs/architecture/other.md`, which no `governs` entry lists; the test asserts `code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern`. | `ValidationError::CodeLinksUngovernedDoc` fires for format rule 2. |
-| `UNKNOWN_RULE_FAIL1` | The `governs` entry for `docs/architecture/mandate-parser.md` gains a rule reference `no-such-rule`, which no `rules` entry defines; the test asserts `rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined`. | `ValidationError::UnknownRule` fires for a dangling rule reference. |
-| `UNREFERENCED_RULE_PASS1` | Two tests. One parses the mandate, whose `rules` list has an added `unused-rule` entry assigned to no document, and asserts the report has no errors and exactly the warning `rule 'unused-rule' is defined but no document references it`. The other pushes `unused-rule` onto the first `governs` entry's `rules` list in code and asserts the report is then empty. | `ValidationWarning::UnreferencedRule` fires and does not fail the mandate, per format rule 3, and clears once the rule is referenced. |
+| `all_links_present` | `passes_when_every_linked_file_is_present` parses the mandate, builds a repo with every linked file present, and checks the report is empty. | An unedited mandate with every file present validates clean. |
+| `case_mismatch` | `fails_when_only_the_case_differs` renames `docs/sop/handling-mandates.md` to `docs/sop/Handling-Mandates.md` in the repo and asserts `governed document not found: docs/sop/handling-mandates.md`; `passes_with_the_exact_path` checks the unedited repo, with the lowercase path present, and passes. | Matching is case-sensitive. Chosen because Linux allows two names differing only by case in one directory, while Windows and macOS refuse it by default, so exact matching is the only behaviour that is the same on all three. |
+| `code_missing` | `fails_when_linked_source_files_are_missing` removes `src/main.rs` and `tests/fixtures/doc_missing/mod.rs` from the repo and asserts both `missing source file:` lines. | `ValidationError::CodeMissing` fires once per missing source file. |
+| `doc_missing` | `fails_when_a_governed_doc_is_missing` removes `docs/sop/handling-mandates.md` from the repo and asserts `governed document not found: docs/sop/handling-mandates.md`; `passes_once_the_doc_is_added_back` removes it and adds it back, and asserts the report is empty. | `ValidationError::DocMissing` fires for a governed document absent from the repo, and clears once the file is present again. |
+| `duplicate_rule` | `fails_when_a_rule_id_is_duplicated` adds a second rule entry with id `claims-match-code` and asserts `duplicate rule id 'claims-match-code'`. | `ValidationError::DuplicateRuleId` fires on a repeated id. |
+| `no_rules` | `fails_when_no_rules_are_defined` empties the mandate's `rules` list and every `governs` entry's `rules` list, and asserts `no rules defined; a mandate needs at least one`. | `ValidationError::NoRules` fires when a mandate defines no rules at all. |
+| `ungoverned_doc` | `fails_when_code_links_a_doc_this_mandate_does_not_govern` adds a `docs` reference to `docs/architecture/other.md` in the `code` entry for `src/domain/mandate.rs`, which no `governs` entry lists; the test asserts `code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern`. | `ValidationError::CodeLinksUngovernedDoc` fires for format rule 2. |
+| `unknown_rule` | `fails_when_a_document_references_an_undefined_rule` adds a rule reference `no-such-rule` to the `governs` entry for `docs/architecture/mandate-parser.md`, which no `rules` entry defines; the test asserts `rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined`. | `ValidationError::UnknownRule` fires for a dangling rule reference. |
+| `unreferenced_rule` | `passes_with_a_warning_when_a_rule_is_unreferenced` adds an `unused-rule` entry to `rules` assigned to no document and asserts the report has no errors and exactly the warning `rule 'unused-rule' is defined but no document references it`; `passes_clean_once_the_rule_is_referenced` pushes `unused-rule` onto the first `governs` entry's `rules` list in code and asserts the report is then empty. | `ValidationWarning::UnreferencedRule` fires and does not fail the mandate, per format rule 3, and clears once the rule is referenced. |
 
 ## Running it
 
@@ -202,13 +197,11 @@ and exits `0`. On any validation error, `execute` prints the `error:` and
 that can print `failed to read '<path>': <os error>`, since only it reads
 the mandate file from disk before calling `execute`.
 
-`cargo test` runs 42 tests: 24 unit tests under `src/` (7 in
+`cargo test` runs 41 tests: 24 unit tests under `src/` (7 in
 `adapters::cli::tests`, 5 in `adapters::yaml::tests`, 12 in
-`domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 16 in
-the `tests/validation_fixtures.rs` target: 3 unit tests of
-`FakeVirtualMachine` in `tests/fake_virtual_machine/mod.rs`, 12 tests
-across the nine cases under `tests/fixtures/validation/`, and one check
-that the generated case list matches the directories on disk.
+`domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 15
+in the `fixtures` target: 12 across the nine cases and 3 for the support
+module.
 
 ## Decisions
 
@@ -229,8 +222,7 @@ that the generated case list matches the directories on disk.
   itself, rather than through the built binary. The binary will gain
   startup side effects of its own, so no test launches it; `parse_args` and
   `execute` are exercised directly instead.
-- Validation behaviour is proven by fixture directories whose data and a
-  short test decide the outcome, built on one shared fake virtual machine
-  rather
-  than per-case file listings, so a case is cheap to add and can prove
-  several things.
+- Validation behaviour is proven by fixture cases inside one test target,
+  each a directory with its mandate and its tests, built on one shared
+  fake virtual machine, so a case is cheap to add and can prove several
+  things.

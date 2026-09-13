@@ -40,13 +40,6 @@ rules:
       source file and line that disagrees with it. Do not report stylistic
       differences or missing detail, only contradictions.
 
-  - id: claims-match-code
-    type: agent
-    description: Fixture-only duplicate of claims-match-code, same id on purpose.
-    prompt: >
-      This entry exists only to exercise the duplicate-rule-id error; its
-      prompt is otherwise unused.
-
   - id: sop-shape
     type: agent
     description: The SOP has the sections an SOP requires and names an owner.
@@ -120,10 +113,10 @@ code:
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/common/mod.rs
+  - path: tests/fixtures/support.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: tests/validation_fixtures.rs
+  - path: tests/fixtures/doc_missing/mod.rs
     docs:
       - docs/architecture/mandate-parser.md

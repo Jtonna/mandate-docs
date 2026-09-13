@@ -1,10 +1,8 @@
-//! A shared in-memory fake virtual machine for the validation fixture tests.
-//!
-//! Each fixture case builds one of these to represent "what files exist on
-//! disk" and hands it straight to `validate` (it implements `FileTree`
-//! itself, no `InMemoryFileTree` involved), so a case can express its
-//! specific edit ("this file is missing", "this file got renamed") in code
-//! instead of maintaining a parallel OS directory listing.
+//! Shared test helpers for the validation fixtures in this target: an
+//! in-memory fake virtual machine to stand in for a repository's file
+//! tree, and the assertions that check a validation report against what
+//! a case expects. Private to `tests/fixtures/`; each case module
+//! reaches it via `use crate::support::*;`.
 
 use std::collections::HashSet;
 
@@ -41,6 +39,7 @@ impl FakeVirtualMachine {
     }
 
     /// Adds `path` to the virtual machine.
+    #[allow(clippy::should_implement_trait)] // builder verb, not std::ops::Add
     pub fn add(mut self, path: impl Into<String>) -> Self {
         self.paths.insert(path.into());
         self
