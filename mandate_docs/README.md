@@ -206,19 +206,22 @@ Cargo.toml                    the Rust crate; unit tests in src/,
 docs/
   architecture/
     PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
-    mandate-parser.md         how the parser and validator are built
+    mandate-parser.md         how the parser, validator and run
+                              command are built
   sop/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
+  application/                the RunMandates use case
 tests/                        integration tests
-  file_tree_contract.rs       the FileTree port contract, run against
-                              every adapter
+  fs_adapters.rs              FsFileTreeSource and FsMandateStore,
+                              run against real temporary directories
   fixtures/                   one test target: main.rs declares
                               support and every case
     support.rs                the fake virtual machine and assertion
                               helpers
     <case>/                   one fixture case: mod.rs and
-                              mandate.yaml
+                              mandate.yaml, including the run_*
+                              cases that exercise RunMandates
 ```
 
 Nothing under `docs/` is sample data, and no test reads it. There is no
@@ -452,11 +455,13 @@ are written down.
    wrong and needs correcting, by hand for now.
 4. **Two rebuild paths:** From `mandate.json` for speed, or from the mandate
    files for correctness. Both produce the same database.
-5. **Mandate validation:** one mandate file is parsed and checked against the
-   format and against the files it names, with every problem reported in one
-   pass. See `docs/architecture/mandate-parser.md`. This is the first piece
-   of real software; it will validate this repository's own mandate once
-   mandate is installed here.
+5. **Mandate validation and the run command:** the `mandate` command finds a
+   project's `.mandate` folder, parses and checks the mandates it selects
+   against the format and against one shared snapshot of the file tree,
+   and reports every problem found in one pass. See
+   `docs/architecture/mandate-parser.md`. This is the first piece of real
+   software; it will validate this repository's own mandates once mandate
+   is installed here.
 
 **Not in scope yet:**
 
@@ -699,7 +704,7 @@ technology:
 
 | File in `tests/` | Intent |
 |---|---|
-| `<port>_contract.rs` | The shared contract suite for one port, run against every implementation. |
+| `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
 The command line is a driving adapter in `src/adapters/cli.rs`, with its own
@@ -925,6 +930,14 @@ that scan is remains undefined:
 
 Until this is settled, coverage percentages are only as meaningful as the
 denominator, and the denominator is whatever the scan decided to index.
+
+The run command's `FileTreeSnapshot`, described in
+`docs/architecture/mandate-parser.md`, is a first scan in this sense: it
+indexes nothing yet, since it feeds validation only, and it skips
+nothing, recording every file and directory under the root with no
+filtering at all. Whether a future scan that fills `mandate.json`'s
+indexes should skip the same nothing, or apply the exclusions this section
+still leaves open, remains undecided.
 
 ### The rule execution contract
 

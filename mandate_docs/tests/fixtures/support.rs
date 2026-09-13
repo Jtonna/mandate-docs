@@ -4,23 +4,34 @@
 //! a case expects. Private to `tests/fixtures/`; each case module
 //! reaches it via `use crate::support::*;`.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::path::Path;
 
-use mandate::adapters::yaml::parse_mandate;
+use mandate::adapters::yaml::{parse_mandate, YamlMandateParser};
+use mandate::application::{RunError, RunMandates};
+use mandate::domain::file_tree::{EntryKind, FileTreeSnapshot};
 use mandate::domain::mandate::Mandate;
-use mandate::domain::ports::file_tree::FileTree;
+use mandate::domain::ports::file_tree_source::{FileTreeSource, SourceError};
+use mandate::domain::ports::mandate_store::{MandateFile, MandateStore, StoreError};
+use mandate::domain::run_report::RunReportMandatesValidation;
 use mandate::domain::validation::validate;
 
-/// An in-memory set of repository-relative paths.
+/// An in-memory repository-relative file tree. Also stands in as the
+/// mandate store: `with_mandate` records both the file's text (for
+/// `MandateStore`) and its presence in the tree (for `FileTreeSource`).
 pub struct FakeVirtualMachine {
-    paths: HashSet<String>,
+    snapshot: FileTreeSnapshot,
+    root: String,
+    mandates: HashMap<String, String>,
 }
 
 impl FakeVirtualMachine {
-    /// A virtual machine with no files at all.
+    /// A virtual machine with no files at all, answering for "/repo".
     pub fn empty() -> Self {
         Self {
-            paths: HashSet::new(),
+            snapshot: FileTreeSnapshot::empty(),
+            root: "/repo".to_string(),
+            mandates: HashMap::new(),
         }
     }
 
@@ -28,43 +39,118 @@ impl FakeVirtualMachine {
     /// and every source file `mandate` links, i.e. a machine that should
     /// pass validation as far as file presence goes.
     pub fn with_every_file_in(mandate: &Mandate) -> Self {
-        let mut vm = Self::empty();
-        for governed in &mandate.governs {
-            vm = vm.add(&governed.doc);
+        Self {
+            snapshot: FileTreeSnapshot::with_every_file_in(mandate),
+            root: "/repo".to_string(),
+            mandates: HashMap::new(),
         }
-        for code in &mandate.code {
-            vm = vm.add(&code.path);
-        }
-        vm
     }
 
-    /// Adds `path` to the virtual machine.
+    /// Adds `path` to the virtual machine as a file.
     #[allow(clippy::should_implement_trait)] // builder verb, not std::ops::Add
     pub fn add(mut self, path: impl Into<String>) -> Self {
-        self.paths.insert(path.into());
+        self.snapshot.insert(path, EntryKind::File);
         self
     }
 
     /// Removes `path` from the virtual machine. Panics if `path` is absent,
     /// to catch a typo in a fixture case rather than silently doing nothing.
     pub fn remove(mut self, path: &str) -> Self {
-        if !self.paths.remove(path) {
+        if !self.snapshot.remove(path) {
             panic!("FakeVirtualMachine::remove: '{path}' is not present");
         }
         self
     }
 
     /// Moves `from` to `to`. Panics if `from` is absent.
-    pub fn rename(self, from: &str, to: impl Into<String>) -> Self {
-        let vm = self.remove(from);
-        vm.add(to)
+    pub fn rename(mut self, from: &str, to: impl Into<String>) -> Self {
+        if !self.snapshot.rename(from, to) {
+            panic!("FakeVirtualMachine::rename: '{from}' is not present");
+        }
+        self
+    }
+
+    /// The directory this virtual machine answers for as a
+    /// [`FileTreeSource`]. Default `"/repo"`.
+    pub fn at_root(mut self, root: &str) -> Self {
+        self.root = root.to_string();
+        self
+    }
+
+    /// Registers a mandate file: `text` becomes readable through
+    /// [`MandateStore`] under `file_name`, and `.mandate`,
+    /// `.mandate/mandates`, and the file itself are added to the snapshot
+    /// as a directory, a directory, and a file respectively.
+    pub fn with_mandate(mut self, file_name: &str, text: &str) -> Self {
+        self.mandates
+            .insert(file_name.to_string(), text.to_string());
+        self.snapshot.insert(".mandate", EntryKind::Directory);
+        self.snapshot
+            .insert(".mandate/mandates", EntryKind::Directory);
+        self.snapshot
+            .insert(format!(".mandate/mandates/{file_name}"), EntryKind::File);
+        self
+    }
+
+    /// Marks the virtual machine's root as having a `.mandate/mandates`
+    /// folder with no mandate files in it.
+    pub fn empty_mandate_folder(mut self) -> Self {
+        self.snapshot.insert(".mandate", EntryKind::Directory);
+        self.snapshot
+            .insert(".mandate/mandates", EntryKind::Directory);
+        self
+    }
+
+    /// A snapshot of the virtual machine's current contents.
+    pub fn snapshot(&self) -> FileTreeSnapshot {
+        self.snapshot.clone()
     }
 }
 
-impl FileTree for FakeVirtualMachine {
-    fn exists(&self, repo_relative_path: &str) -> bool {
-        self.paths.contains(repo_relative_path)
+impl FileTreeSource for FakeVirtualMachine {
+    fn snapshot(&self, root: &Path) -> Result<FileTreeSnapshot, SourceError> {
+        let requested = root.to_string_lossy().replace('\\', "/");
+        if requested == self.root {
+            Ok(self.snapshot.clone())
+        } else {
+            Ok(FileTreeSnapshot::empty())
+        }
     }
+
+    fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError> {
+        let requested = dir.to_string_lossy().replace('\\', "/");
+        Ok(requested == self.root && self.snapshot.is_dir(name))
+    }
+}
+
+impl MandateStore for FakeVirtualMachine {
+    fn list(&self, _root: &Path) -> Result<Vec<String>, StoreError> {
+        let mut names: Vec<String> = self.mandates.keys().cloned().collect();
+        names.sort();
+        Ok(names)
+    }
+
+    fn read(&self, _root: &Path, file_name: &str) -> Result<MandateFile, StoreError> {
+        self.mandates
+            .get(file_name)
+            .map(|text| MandateFile {
+                file_name: file_name.to_string(),
+                text: text.clone(),
+            })
+            .ok_or_else(|| StoreError(format!("unknown mandate file '{file_name}'")))
+    }
+}
+
+/// Runs [`RunMandates`] against `vm`, selecting `selected` (empty selects
+/// every mandate the store lists), starting discovery at `start_dir`.
+pub fn run(
+    vm: &FakeVirtualMachine,
+    start_dir: &str,
+    selected: &[&str],
+) -> Result<RunReportMandatesValidation, RunError> {
+    let parser = YamlMandateParser;
+    let selected: Vec<String> = selected.iter().map(|s| s.to_string()).collect();
+    RunMandates::new(vm, vm, &parser).execute(Path::new(start_dir), &selected)
 }
 
 /// Parses `yaml` into a [`Mandate`], panicking with the parse error if it is
@@ -77,7 +163,7 @@ pub fn parse(yaml: &str) -> Mandate {
 /// Validates `mandate` against `vm` and returns the report lines exactly as
 /// the CLI prints them, in validator order (see `ValidationReport::lines`).
 pub fn check(mandate: &Mandate, vm: &FakeVirtualMachine) -> Vec<String> {
-    validate(mandate, vm).lines()
+    validate(mandate, &vm.snapshot()).lines()
 }
 
 /// Asserts `lines` (as returned by [`check`]) reports no problems at all.
@@ -152,7 +238,7 @@ mod tests {
             .add("docs/a.md")
             .rename("docs/a.md", "docs/b.md");
 
-        assert!(!vm.exists("docs/a.md"));
-        assert!(vm.exists("docs/b.md"));
+        assert!(!vm.snapshot().exists("docs/a.md"));
+        assert!(vm.snapshot().exists("docs/b.md"));
     }
 }

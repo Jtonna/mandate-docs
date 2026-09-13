@@ -1,47 +1,54 @@
-# Mandate parser and validator
+# Mandate parser, validator and run command
 
 ## Purpose
 
-This is the first real software in the repository: a Rust crate that parses
-one mandate YAML file into a Rust value, validates it against the mandate
-format and against the files it names, and reports every problem it finds in
-one pass. It does not read or write `mandate.json`, does not scan the
-repository for mandates, documents or source files, and does not execute a
-rule. Those remain out of scope, as recorded in `README.md` section 5.
+This is the first real software in the repository: a Rust crate that finds
+a project's `.mandate` folder, parses every selected mandate YAML file into
+a Rust value, validates each against the mandate format and against one
+shared snapshot of the file tree, and reports every problem it finds in one
+pass. It does not read or write `mandate.json` and does not execute a rule.
+Those remain out of scope, as recorded in `README.md` section 5.
 
 ## Shape
 
 The crate follows `docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md`, scaled to
-the size of the problem: one port, two adapters, no application layer,
-because there is no use case beyond "parse, then validate".
+the size of the problem: three driven ports, three adapters, and one
+application-layer use case that owns discovery, selection and reporting.
 
 | File | Layer | Role |
 |---|---|---|
 | `src/domain/mandate.rs` | domain | Plain data types for a mandate: `Mandate`, `Rule`, `RuleKind`, `GovernedDoc`, `CodeLink`. No serde, no I/O. |
-| `src/domain/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `FileTree`. `ValidationReport::lines` renders the report one line per finding. |
-| `src/domain/ports/file_tree.rs` | port | The `FileTree` trait the domain depends on. |
-| `src/adapters/yaml.rs` | driven adapter | `parse_mandate` and `ParseError`. Turns mandate YAML text into a `Mandate`. |
-| `src/adapters/memory_tree.rs` | driven adapter | `InMemoryFileTree`, a `FileTree` backed by a set of paths. |
-| `src/adapters/fs_tree.rs` | driven adapter | `FsFileTree`, a `FileTree` backed by the real filesystem. |
-| `src/adapters/cli.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `execute` parses the mandate text, validates it, and prints the report to the given writers, returning the exit code. Neither function does any I/O of its own. |
-| `src/main.rs` | composition root | Collects the process arguments, reads the mandate file, builds an `FsFileTree`, calls `execute`, and maps its exit code to the process exit status. |
-| `src/lib.rs` | composition root | Declares the `adapters` and `domain` modules. |
+| `src/domain/file_tree.rs` | domain | `FileTreeSnapshot`, a value recording every file and directory under a root at one point in time. `EntryKind` distinguishes a file from a directory. |
+| `src/domain/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `&FileTreeSnapshot`. `ValidationReport::lines` renders the report one line per finding. |
+| `src/domain/run_report.rs` | domain | `RunReportMandatesValidation`, the report for one run: root, snapshot entry count, warnings, and one outcome per mandate. `is_valid()` and `lines()`. |
+| `src/domain/ports/file_tree_source.rs` | port | `FileTreeSource`, snapshots a root and cheaply checks whether one directory holds another. |
+| `src/domain/ports/mandate_store.rs` | port | `MandateStore`, lists and reads mandate files under a root. |
+| `src/domain/ports/mandate_parser.rs` | port | `MandateParser`, turns mandate text into a `Mandate`. |
+| `src/application/run_mandates.rs` | application | `RunMandates`, the use case: discovers the project root, takes the snapshot, selects mandates, parses and validates each, and fills the report. `RunError` for its failure modes. |
+| `src/adapters/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
+| `src/adapters/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
+| `src/adapters/yaml.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`, plus `ParseError`. Turns mandate YAML text into a `Mandate`. |
+| `src/adapters/cli.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. `exit_code` maps a report to a process exit code. None of the three does any I/O of its own. |
+| `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
+| `src/lib.rs` | composition root | Declares the `adapters`, `application` and `domain` modules. |
 
-Dependencies point one way: the adapters and the composition root import
-the domain; the domain imports nothing outside `std`. `FileTree` is a
-driven port because the domain calls it to ask whether a path exists;
-`src/adapters/cli.rs` is the sole driving adapter, since nothing else calls
-into the crate yet.
+Dependencies point one way: the adapters, the application layer and the
+composition root import the domain; the domain imports nothing outside
+`std`. `FileTreeSource`, `MandateStore` and `MandateParser` are driven ports
+because `RunMandates` calls them to reach the filesystem and the YAML
+parser; `src/adapters/cli.rs` is the sole driving adapter, since nothing
+else calls into the crate yet.
 
 Tests follow the split in `README.md` section 10, step 3:
 
 | File | Kind | What it covers |
 |---|---|---|
 | `src/adapters/yaml.rs` | unit, in-file | The five parse-error cases, with inline YAML. |
-| `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private `FakeTree` so the domain test module imports nothing from an adapter. |
-| `tests/file_tree_contract.rs` | integration, contract | One assertion function run against both `InMemoryFileTree` and `FsFileTree`, the latter on a real temporary directory. |
-| `src/adapters/cli.rs` | unit, in-file | Argument parsing and `execute`, using a private fake `FileTree` and in-memory writers. No process is launched. |
-| `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTree`, built from a mandate with every linked file present, then edited with `add`, `remove` and `rename`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
+| `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
+| `src/application/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
+| `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories. |
+| `src/adapters/cli.rs` | unit, in-file | Argument parsing, `render` and `exit_code`, using in-memory writers and a hand-built report. No process is launched. |
+| `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTreeSource` and `MandateStore`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 
 Tests never read `docs/`, and no test runs the built binary. This repository
@@ -54,24 +61,126 @@ module. `parse_mandate` maps each one into the plain domain types in
 no library type may enter the domain: the domain types carry no `serde`
 attributes and would compile unchanged if the YAML library were replaced.
 
-## The port
+## The ports
 
-`FileTree` has one method:
+`FileTreeSource` has two methods:
 
 ```rust
-fn exists(&self, repo_relative_path: &str) -> bool
+fn snapshot(&self, root: &Path) -> Result<FileTreeSnapshot, SourceError>;
+fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError>;
 ```
 
-Two adapters implement it. `InMemoryFileTree` holds a set of path strings and
-is both the fake used in domain tests and, per the architecture guide, a
-usable adapter in its own right. `FsFileTree` holds a root directory and
-answers by joining the root with the given path and checking whether the
-result exists on disk.
+`snapshot` walks the whole tree under `root`. `has_directory` answers
+whether `dir` contains a directory entry named `name`, without building a
+snapshot, and answers `false` rather than erroring when `dir` itself
+cannot be read, so an unreadable ancestor is a reason it cannot be the
+root and never a reason to stop looking further up. `FsFileTreeSource` is
+the sole adapter, walking the real filesystem from `root`: every file and
+directory underneath, `.git` and `target/` included, symlinks recorded as
+files and never followed.
 
-Both implementations are held to the same contract by
-`tests/file_tree_contract.rs`, which runs one assertion function, taking a
-`&dyn FileTree`, against each: a known path exists, and an unknown path does
-not.
+`MandateStore` has two methods:
+
+```rust
+fn list(&self, root: &Path) -> Result<Vec<String>, StoreError>;
+fn read(&self, root: &Path, file_name: &str) -> Result<MandateFile, StoreError>;
+```
+
+`list` returns the file names of the `.yaml` files directly in
+`<root>/.mandate/mandates/`, sorted; `read` returns one file's text.
+`FsMandateStore` is the sole adapter.
+
+`MandateParser` has one method, turning mandate text into a `Mandate` or a
+parse error; `YamlMandateParser` in `src/adapters/yaml.rs` is the sole
+adapter, and is described in full in "What parsing rejects" below.
+
+`FakeVirtualMachine` in `tests/fixtures/support.rs` implements both
+`FileTreeSource` and `MandateStore` in one type, since a test scenario
+naturally sets up a repository's files and its mandate texts together.
+
+## The run command
+
+`RunMandates` in `src/application/run_mandates.rs` is the use case behind
+`mandate [--root <dir>] [<file>.yaml ...]`.
+
+**Discovery.** With no `--root`, discovery starts at the current directory.
+`RunMandates::discover_root` checks each ancestor in turn with
+`FileTreeSource::has_directory(dir, ".mandate")`, a cheap existence check
+that answers `false`, rather than erroring, when a directory cannot be
+read; if the check comes back false, it moves to the parent and repeats.
+Reaching the filesystem root without finding one is
+`RunError::NoMandateFolder`. It never looks inside child directories, so a
+nested project with its own `.mandate` is ignored. Only the ancestor that
+turns out to hold `.mandate` is ever snapshotted; every ancestor tried
+above it gets only the existence check, never a full walk of its tree.
+This is recorded in a comment beside `discover_root`: snapshotting every
+ancestor while searching meant walking directories the current user does
+not own, and a real run failed with "Access is denied" on an unrelated
+system temp folder before it could even report `.mandate` was never
+found.
+
+**Snapshot.** `RunMandates` shares the one snapshot taken at the
+discovered root across every mandate validated in the run. `validate`
+never takes its own snapshot.
+
+**Selection.** `MandateStore::list` returns the `.yaml` file names directly
+in `.mandate/mandates/`. Selection is by full file name, case-sensitive; the
+`name:` field inside a mandate is descriptive only and plays no part in
+selection. With no names given on the command line, every listed mandate
+runs. An empty mandates folder is `RunWarning::NoMandatesFound`, not an
+error. A name on the command line that matches no file is
+`RunError::UnknownMandate` and stops the run before anything is validated.
+
+**Per-mandate outcome.** Every selected mandate is read, parsed and
+validated in turn. A parse failure is recorded in that mandate's slot as
+`MandateResult::ParseFailed`, and the run continues with the rest; it does
+not stop the run the way an unknown name does.
+
+**Exit codes.** `0` when every selected mandate parsed and validated
+clean. `1` if any mandate failed to parse or validated with errors. `1`
+also for `RunError::NoMandateFolder` and `RunError::UnknownMandate`, both
+reported before any mandate runs. `0` for an empty mandates folder, since a
+warning is not a failure.
+
+## The report
+
+`RunReportMandatesValidation` in `src/domain/run_report.rs` is the domain
+value the run command produces. Fields: `root`, `snapshot_entries`,
+`warnings` (a `Vec<RunWarning>`), and `mandates` (a `Vec<MandateOutcome>`,
+one per selected mandate, each an `Enum` of `ParseFailed(String)` or
+`Validated(ValidationReport)`). `is_valid()` is `true` when no outcome is a
+parse failure and every `ValidationReport` is valid. `lines()` renders the
+whole report as one string per line, in the layout below.
+
+Nothing prints during the run: `RunMandates` only fills the report, and the
+CLI's `render` writes it out once the run is finished.
+
+The naming convention is `RunReport<Phase>`, so a later phase (rule
+execution) gets its own `RunReport` type rather than growing this one.
+
+Rendered layout:
+
+```
+repository: <root>
+snapshot: <n> entries
+
+warning: no mandates found in <dir>      (only when it applies)
+
+SOP_Orders.yaml
+  error: governed document not found: docs/architecture/order-lifecycle.md
+  invalid: 1 errors, 0 warnings
+
+Networking.yaml
+  valid: 3 rules, 2 documents, 7 source files
+
+2 mandates checked, 1 invalid
+```
+
+Each mandate's block starts with its file name, then its `ValidationReport`
+lines indented two spaces (or a `failed to parse: <message>` line for a
+parse failure), then a summary line: `valid: ...` or
+`invalid: <n> errors, <n> warnings`. The final line always reports the
+total mandates checked and how many were invalid.
 
 ## What parsing rejects
 
@@ -96,18 +205,20 @@ instead, once a `Mandate` value exists to check.
 
 ## What validation checks
 
-`validate` in `src/domain/validation.rs` takes a `Mandate` and a `&dyn
-FileTree` and returns a `ValidationReport { errors, warnings }` built in one
-pass: every check in the function runs regardless of what earlier checks
-found. `report.is_valid()` is `true` exactly when `errors` is empty;
-`warnings` never affects it.
+`validate` in `src/domain/validation.rs` takes a `Mandate` and a
+`&FileTreeSnapshot` and returns a `ValidationReport { errors, warnings, ... }`
+built in one pass: every check in the function runs regardless of what
+earlier checks found. `report.is_valid()` is `true` exactly when `errors`
+is empty; `warnings` never affects it.
 
 `ValidationReport::lines` renders the report as one string per finding,
 errors first in validator order, then warnings, each prefixed `error: ` or
-`warning: ` and using the `Display` text in the table below. The CLI's
-`execute` writes those lines as they are, and the fixture helper's `check`
-returns them unchanged, so the printed format and its order are defined
-in one place and every fixture case asserts exactly what a user would see.
+`warning: ` and using the `Display` text in the table below.
+`RunReportMandatesValidation::lines`, described in "The report" below,
+indents these lines under each mandate's file name, and the fixture
+helper's `check` returns them unchanged, so the printed format and its
+order are defined in one place and every fixture case asserts exactly
+what a user would see.
 
 | Variant | Message printed | Meaning |
 |---|---|---|
@@ -141,18 +252,25 @@ proves, holding two files:
 - `mod.rs`, the case's own test module, starting with
   `use crate::support::*;` and `include_str!("mandate.yaml")`.
 
-The test parses the mandate with `parse`, builds a `FakeVirtualMachine`
-with every linked file present via `FakeVirtualMachine::with_every_file_in`,
-applies the case's edit in code (`remove`, `rename`, or a change to the
-parsed `Mandate` value), then calls `check`, which calls `validate` and
-returns `ValidationReport::lines` unchanged, so a case asserts the lines in
-validator order: errors first, following the mandate's own order of
-`rules`, `governs` and `code`, then warnings.
+The validation test parses the mandate with `parse`, builds a
+`FakeVirtualMachine` with every linked file present via
+`FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
+(`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
+`check`, which calls `validate` and returns `ValidationReport::lines`
+unchanged, so a case asserts the lines in validator order: errors first,
+following the mandate's own order of `rules`, `governs` and `code`, then
+warnings.
 Then the test asserts the result with `assert_passes`,
 `assert_passes_with_warnings` or `assert_fails`. Because the assertion is
 exact, an unexpected extra line fails the test. Pass or fail is in each
 test function's name, and a case can hold more than one test; three of
-the nine do.
+the nine original cases do.
+
+The five `run_*` cases exercise `RunMandates` instead: they build a
+`FakeVirtualMachine` with `with_mandate` to add named mandate texts, edit
+it with `add`, `remove` or `rename` for missing files, run it through
+`RunMandates`, and assert on `RunReportMandatesValidation::lines()` or on
+the `RunError` returned.
 
 Each `mandate.yaml` is an independent copy, edited only where the case
 needs it; there is nothing else it is kept in sync with.
@@ -168,40 +286,51 @@ needs it; there is nothing else it is kept in sync with.
 | `ungoverned_doc` | `fails_when_code_links_a_doc_this_mandate_does_not_govern` adds a `docs` reference to `docs/architecture/other.md` in the `code` entry for `src/domain/mandate.rs`, which no `governs` entry lists; the test asserts `code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern`. | `ValidationError::CodeLinksUngovernedDoc` fires for format rule 2. |
 | `unknown_rule` | `fails_when_a_document_references_an_undefined_rule` adds a rule reference `no-such-rule` to the `governs` entry for `docs/architecture/mandate-parser.md`, which no `rules` entry defines; the test asserts `rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined`. | `ValidationError::UnknownRule` fires for a dangling rule reference. |
 | `unreferenced_rule` | `passes_with_a_warning_when_a_rule_is_unreferenced` adds an `unused-rule` entry to `rules` assigned to no document and asserts the report has no errors and exactly the warning `rule 'unused-rule' is defined but no document references it`; `passes_clean_once_the_rule_is_referenced` pushes `unused-rule` onto the first `governs` entry's `rules` list in code and asserts the report is then empty. | `ValidationWarning::UnreferencedRule` fires and does not fail the mandate, per format rule 3, and clears once the rule is referenced. |
+| `run_all` | `two_mandates_run_and_one_is_invalid` builds two mandates and makes the second invalid by pointing one of its `code` links at a file the first mandate does not have (`src/domain/mandate_only_in_b.rs`), selects none on the command line, and asserts both mandates appear in the report, the report's exact `lines()`, and that the run is invalid. | Running with no names runs every mandate found, and one invalid mandate does not stop the others from being reported. |
+| `run_named` | `selecting_one_name_runs_only_it` builds a repo with two mandates, names one (`b.yaml`) on the command line, and asserts the report has only that one outcome and is valid. | Selection by file name runs only the named mandate. |
+| `run_unknown_name` | `unknown_name_errors_and_lists_both_available` builds a repo with two mandates, names a file that does not exist, and asserts `RunError::UnknownMandate` naming it and listing both `a.yaml` and `b.yaml` as available. | An unknown name is an error before anything runs. |
+| `run_from_subdirectory` | `starts_below_root_and_finds_it_by_walking_up` builds a repo with a `.mandate` folder at `/repo` and starts discovery from `/repo/src`; asserts the report's root is `/repo` and the run is valid. | Discovery climbs from the starting directory to the nearest ancestor with `.mandate`. |
+| `run_no_mandates` | `no_mandate_files_warns_and_reports_zero` builds a repo with an empty `.mandate/mandates` folder; asserts `RunWarning::NoMandatesFound` naming the mandates directory, zero mandates in the report, and that the run is valid. | An empty mandates folder is a warning, not a failure. |
 
 ## Running it
 
-Run from an adopting project's root, with `--root .`:
+From anywhere inside an adopting project:
 
 ```
-cargo run -- validate <mandate-file> --root .
+mandate
+```
+
+finds the project's `.mandate` folder by climbing from the current
+directory and validates every mandate it lists. To validate only some:
+
+```
+mandate SOP_Orders.yaml Networking.yaml
+```
+
+To start discovery somewhere other than the current directory:
+
+```
+mandate --root /path/to/project
 ```
 
 This repository has no mandate of its own yet, so there is nothing here
 to run it against.
 
-On success, `execute` prints one line per error (`error: <message>`, none in
-this case), one line per warning (`warning: <message>`), then:
+Exit codes: `0` when every selected mandate is valid, including the case
+of an empty mandates folder (a warning, not a failure); `1` when any
+mandate failed to parse or validated with errors, when no `.mandate`
+folder was found, or when a named mandate does not exist. `parse_args` in
+`src/adapters/cli.rs` produces the `usage: mandate [--root <dir>]
+[<mandate-file>.yaml ...]` message when the command line does not match
+that shape.
 
-```
-mandate '<name>' is valid: <n> rules, <n> documents, <n> source files
-```
-
-and exits `0`. On any validation error, `execute` prints the `error:` and
-`warning:` lines and returns `1` with no success line. `parse_args` in
-`src/adapters/cli.rs` produces the `usage: mandate validate <mandate-file>
---root <dir>` message when the command line does not match that shape
-(missing arguments, a command other than `validate`, or a missing
-`--root`), and `execute` produces `failed to parse '<path>': <error>` when
-`parse_mandate` returns a `ParseError`. `src/main.rs` is the only place
-that can print `failed to read '<path>': <os error>`, since only it reads
-the mandate file from disk before calling `execute`.
-
-`cargo test` runs 41 tests: 24 unit tests under `src/` (7 in
-`adapters::cli::tests`, 5 in `adapters::yaml::tests`, 12 in
-`domain::validation::tests`), 2 in `tests/file_tree_contract.rs`, and 15
-in the `fixtures` target: 12 across the nine cases and 3 for the support
-module.
+`cargo test` runs 77 tests: 47 unit tests under `src/` (8 in
+`adapters::cli::tests`, 5 in `adapters::yaml::tests`, 5 in
+`domain::file_tree::tests`, 4 in `domain::run_report::tests`, 13 in
+`domain::validation::tests`, 12 in `application::run_mandates::tests`),
+10 in `tests/fs_adapters.rs`, and 20 in the `fixtures` target: 12 across
+the nine validation cases, 5 across the five run cases, and 3 for the
+support module.
 
 ## Decisions
 
@@ -220,9 +349,24 @@ module.
   `rules` list is (`ValidationError::NoRules`).
 - The CLI is a driving adapter tested in-process, in `src/adapters/cli.rs`
   itself, rather than through the built binary. The binary will gain
-  startup side effects of its own, so no test launches it; `parse_args` and
-  `execute` are exercised directly instead.
+  startup side effects of its own, so no test launches it; `parse_args`,
+  `render` and `exit_code` are exercised directly instead.
 - Validation behaviour is proven by fixture cases inside one test target,
   each a directory with its mandate and its tests, built on one shared
   fake virtual machine, so a case is cheap to add and can prove several
   things.
+- The file tree snapshot is a domain value, not a port the domain calls
+  live, so `validate` takes a plain `&FileTreeSnapshot` and one snapshot
+  can be shared across every mandate in a run without retaking it.
+- Discovery checks each ancestor with a cheap existence check,
+  `FileTreeSource::has_directory`, rather than snapshotting it, and
+  snapshots only the ancestor that turns out to hold `.mandate`, because
+  snapshotting every ancestor walked directories the current user does
+  not own; a real run failed with "Access is denied" on a system temp
+  folder before it could report `.mandate` was never found.
+- Mandate selection is by file name, case-sensitive, never by the `name:`
+  field inside the file, so two mandates cannot collide on a name a user
+  did not choose as a file name.
+- A run validates and reports every selected mandate rather than stopping
+  at the first invalid one, matching the choice already made inside
+  `validate` itself: an author sees every problem in one pass.

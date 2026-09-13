@@ -1,0 +1,122 @@
+# Mandate_Parser
+#
+# A mandate is self-contained. It declares its own linkage, so the whole system
+# can be rebuilt by parsing every file in .mandate/mandates/.
+#
+# .mandate/mandate.json is a serialised copy of that same data, kept for fast
+# rebuilds. This file is the source of truth; mandate.json is derived from it.
+
+name: Mandate_Parser
+
+# Human-facing only. Says what this mandate is meant to cover, for whoever opens
+# the file. It is not passed to agents when rules run, so it cannot influence a
+# result. Optional, and entirely up to the author how or whether to use it.
+description: >
+  Covers the mandate parser and validator in src/, and the procedure for
+  handling mandate files. Does not cover mandate.json generation, scanning,
+  or rule execution, none of which exist.
+
+# Rules are defined once and referenced by id from the documents they apply to.
+# At least one rule is required.
+#
+# No scripts/ folder exists in this repository, so every rule here is
+# type: agent rather than type: script; a script rule pointing at a missing
+# script would itself be a false claim.
+#
+#   type: script  - runs a command. Deterministic. Exit 0 passes.
+#   type: agent   - runs a prompt against an AI agent. A judgement, and may
+#                   vary between runs.
+#
+# A rule's description is human-facing, like the mandate's. Only prompt is sent
+# to the agent, so editing a description can never change a result.
+rules:
+  - id: claims-match-code
+    type: agent
+    description: Documented behaviour matches what the code actually does.
+    prompt: >
+      Read the document and the source files linked to it. For every factual
+      claim the document makes about behaviour, check it against the code.
+      Report each claim the code contradicts, quoting the document line and the
+      source file and line that disagrees with it. Do not report stylistic
+      differences or missing detail, only contradictions.
+
+  - id: sop-shape
+    type: agent
+    description: The SOP has the sections an SOP requires and names an owner.
+    prompt: >
+      Confirm the document has the sections Purpose, Scope, Owner and Steps,
+      in that order, and that Owner names a person. Report any that is
+      missing, out of order, or empty.
+
+  - id: commands-work
+    type: agent
+    description: Every command the document shows behaves as described.
+    prompt: >
+      List every shell command the document shows. For each, confirm from the
+      linked source files that the command, its flags, its printed messages
+      and its exit codes match what the document says. Report each mismatch,
+      quoting the document line and the source line.
+
+# The documents this mandate governs, and which rules apply to each.
+# Paths are relative to the repository root. Markdown files in this repository
+# only; external documentation is not supported.
+governs:
+  - doc: docs/architecture/mandate-parser.md
+    rules:
+      - claims-match-code
+
+  - doc: docs/sop/handling-mandates.md
+    rules:
+      - sop-shape
+      - commands-work
+      - claims-match-code
+
+# The source files, and which of the documents above each one links to.
+# This is what a rule reads when it needs to check a document against code.
+code:
+  - path: src/domain/mandate.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: src/domain/validation.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+      - docs/sop/handling-mandates.md
+
+  - path: src/domain/ports/file_tree.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: src/adapters/yaml.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: src/adapters/memory_tree.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: src/adapters/fs_tree.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: src/main.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+      - docs/sop/handling-mandates.md
+
+  - path: src/adapters/cli.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+      - docs/sop/handling-mandates.md
+
+  - path: tests/file_tree_contract.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: tests/fixtures/support.rs
+    docs:
+      - docs/architecture/mandate-parser.md
+
+  - path: tests/fixtures/doc_missing/mod.rs
+    docs:
+      - docs/architecture/mandate-parser.md

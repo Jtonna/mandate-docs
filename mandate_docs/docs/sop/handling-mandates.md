@@ -36,29 +36,38 @@ Jacob Tonna
    listed under a `code` entry's `docs` must name a document present in
    `governs`.
 
-3. Validate the mandate. From `mandate_docs/`, run:
+3. Validate the mandate. Run `mandate` from anywhere inside the project:
 
    ```
-   cargo run -- validate .mandate/mandates/<Name>.yaml --root .
+   mandate
    ```
 
-   In an adopting project, the `mandate` binary is run from that project's
-   root with `--root .`.
+   This finds the project's `.mandate` folder, validates every mandate it
+   lists, and prints one block per mandate. To check only the one just
+   written, name its file:
 
-   Exit code `0` with the line `mandate '<name>' is valid: ...` means this
-   step is done.
+   ```
+   mandate <Name>.yaml
+   ```
+
+   A valid result shows the mandate's file name followed by a `valid: <n>
+   rules, <n> documents, <n> source files` line, and the run exits `0`.
+   Any `error:` or `warning:` line printed under the mandate's name means
+   step 4 or step 5 below applies before moving on.
 
 4. Fix every reported error before moving on.
 
    | Message | What to do |
    |---|---|
+   | `no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. |
+   | `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. |
    | `no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
    | `duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |
    | `rule '<rule>' is referenced by <doc> but not defined` | Either add a `rules` entry with that `id`, or remove the reference from that document's `rules` list under `governs`. |
    | `code <path> links <doc> which this mandate does not govern` | Add `<doc>` to `governs`, or remove it from that `code` entry's `docs` list. |
    | `governed document not found: <doc>` | Create the document at that path, or correct the path if it was mistyped. |
    | `missing source file: <path>` | Create the file, or correct the path if it was mistyped. |
-   | `failed to parse '<path>': ...` | A shape problem: an unknown field, a missing required field, or a rule missing its `run` (for `type: script`) or its `prompt` (for `type: agent`). The message names the offending field or rule id; fix that field and re-run. |
+   | `failed to parse: ...` | A shape problem: an unknown field, a missing required field, or a rule missing its `run` (for `type: script`) or its `prompt` (for `type: agent`). The message names the offending field or rule id; fix that field and re-run. |
 
 5. Decide about each warning, of the form `rule '<id>' is defined but no
    document references it`. Either reference the rule from a document's

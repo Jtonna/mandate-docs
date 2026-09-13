@@ -158,6 +158,17 @@ fn rule_from_doc(rule: RuleDoc) -> Result<Rule, ParseError> {
     })
 }
 
+/// Adapts [`parse_mandate`] to the [`crate::domain::ports::mandate_parser::MandateParser`]
+/// port, so the application layer can parse mandate text without depending
+/// on this module's serde types directly.
+pub struct YamlMandateParser;
+
+impl crate::domain::ports::mandate_parser::MandateParser for YamlMandateParser {
+    fn parse(&self, text: &str) -> Result<Mandate, String> {
+        parse_mandate(text).map_err(|e| e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

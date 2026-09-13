@@ -1,10 +1,10 @@
-//! Validates a parsed [`Mandate`] against a [`FileTree`], reporting every
-//! problem found rather than stopping at the first.
+//! Validates a parsed [`Mandate`] against a [`FileTreeSnapshot`], reporting
+//! every problem found rather than stopping at the first.
 
 use std::fmt;
 
+use super::file_tree::FileTreeSnapshot;
 use super::mandate::Mandate;
-use super::ports::file_tree::FileTree;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
@@ -59,6 +59,12 @@ impl fmt::Display for ValidationWarning {
 pub struct ValidationReport {
     pub errors: Vec<ValidationError>,
     pub warnings: Vec<ValidationWarning>,
+    /// Counts from the mandate that was checked, carried alongside the
+    /// findings so a caller can render a "valid: N rules, N documents, N
+    /// source files" summary without holding onto the `Mandate` itself.
+    pub rule_count: usize,
+    pub doc_count: usize,
+    pub code_count: usize,
 }
 
 impl ValidationReport {
@@ -77,7 +83,7 @@ impl ValidationReport {
     }
 }
 
-pub fn validate(mandate: &Mandate, tree: &dyn FileTree) -> ValidationReport {
+pub fn validate(mandate: &Mandate, snapshot: &FileTreeSnapshot) -> ValidationReport {
     use std::collections::HashSet;
 
     let mut errors = Vec::new();
@@ -105,7 +111,7 @@ pub fn validate(mandate: &Mandate, tree: &dyn FileTree) -> ValidationReport {
     for governed in &mandate.governs {
         governed_docs.insert(governed.doc.as_str());
 
-        if !tree.exists(&governed.doc) {
+        if !snapshot.is_file(&governed.doc) {
             errors.push(ValidationError::DocMissing {
                 doc: governed.doc.clone(),
             });
@@ -124,7 +130,7 @@ pub fn validate(mandate: &Mandate, tree: &dyn FileTree) -> ValidationReport {
     }
 
     for code_link in &mandate.code {
-        if !tree.exists(&code_link.path) {
+        if !snapshot.is_file(&code_link.path) {
             errors.push(ValidationError::CodeMissing {
                 path: code_link.path.clone(),
             });
@@ -148,34 +154,19 @@ pub fn validate(mandate: &Mandate, tree: &dyn FileTree) -> ValidationReport {
         }
     }
 
-    ValidationReport { errors, warnings }
+    ValidationReport {
+        errors,
+        warnings,
+        rule_count: mandate.rules.len(),
+        doc_count: mandate.governs.len(),
+        code_count: mandate.code.len(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
-    use std::collections::HashSet;
-
-    /// A minimal in-file fake for [`FileTree`], kept private to this test
-    /// module so a domain test never crosses a layer boundary.
-    struct FakeTree(HashSet<String>);
-
-    impl FakeTree {
-        fn new<I, S>(paths: I) -> Self
-        where
-            I: IntoIterator<Item = S>,
-            S: Into<String>,
-        {
-            Self(paths.into_iter().map(Into::into).collect())
-        }
-    }
-
-    impl FileTree for FakeTree {
-        fn exists(&self, repo_relative_path: &str) -> bool {
-            self.0.contains(repo_relative_path)
-        }
-    }
 
     fn rule(id: &str) -> Rule {
         Rule {
@@ -206,9 +197,9 @@ mod tests {
     #[test]
     fn validate_valid_mandate_with_all_files_present() {
         let mandate = valid_mandate();
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(report.is_valid());
         assert!(report.errors.is_empty(), "{:?}", report.errors);
@@ -220,9 +211,9 @@ mod tests {
         let mut mandate = valid_mandate();
         mandate.rules.clear();
         mandate.governs[0].rules.clear();
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::NoRules));
@@ -232,9 +223,9 @@ mod tests {
     fn validate_duplicate_rule_id_is_error() {
         let mut mandate = valid_mandate();
         mandate.rules.push(rule("has-owner"));
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::DuplicateRuleId {
@@ -246,9 +237,9 @@ mod tests {
     fn validate_unknown_rule_reference_is_error() {
         let mut mandate = valid_mandate();
         mandate.governs[0].rules.push("no-such-rule".to_string());
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::UnknownRule {
@@ -261,9 +252,9 @@ mod tests {
     fn validate_code_linking_ungoverned_doc_is_error() {
         let mut mandate = valid_mandate();
         mandate.code[0].docs.push("docs/ungoverned.md".to_string());
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report
@@ -277,9 +268,10 @@ mod tests {
     #[test]
     fn validate_missing_doc_is_error() {
         let mandate = valid_mandate();
-        let tree = FakeTree::new(["src/a.ts"]);
+        let mut snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
+        snapshot.remove("docs/a.md");
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::DocMissing {
@@ -290,9 +282,10 @@ mod tests {
     #[test]
     fn validate_missing_code_file_is_error() {
         let mandate = valid_mandate();
-        let tree = FakeTree::new(["docs/a.md"]);
+        let mut snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
+        snapshot.remove("src/a.ts");
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::CodeMissing {
@@ -301,12 +294,27 @@ mod tests {
     }
 
     #[test]
+    fn validate_a_directory_at_a_governed_doc_path_is_doc_missing() {
+        let mandate = valid_mandate();
+        let mut snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
+        snapshot.remove("docs/a.md");
+        snapshot.insert("docs/a.md", crate::domain::file_tree::EntryKind::Directory);
+
+        let report = validate(&mandate, &snapshot);
+
+        assert!(!report.is_valid());
+        assert!(report.errors.contains(&ValidationError::DocMissing {
+            doc: "docs/a.md".to_string()
+        }));
+    }
+
+    #[test]
     fn validate_unreferenced_rule_is_warning_not_error() {
         let mut mandate = valid_mandate();
         mandate.rules.push(rule("unused-rule"));
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(report.is_valid());
         assert_eq!(report.warnings.len(), 1);
@@ -324,9 +332,9 @@ mod tests {
         mandate.governs[0].rules.clear();
         mandate.governs[0].rules.push("no-such-rule".to_string()); // -> UnknownRule
         mandate.code[0].docs.push("docs/ungoverned.md".to_string()); // -> CodeLinksUngovernedDoc
-        let tree = FakeTree::new(["docs/a.md", "src/a.ts"]);
+        let snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
 
-        let report = validate(&mandate, &tree);
+        let report = validate(&mandate, &snapshot);
 
         assert!(!report.is_valid());
         assert!(report.errors.contains(&ValidationError::NoRules));
@@ -391,6 +399,7 @@ mod tests {
             warnings: vec![ValidationWarning::UnreferencedRule {
                 id: "y".to_string(),
             }],
+            ..Default::default()
         };
 
         assert_eq!(

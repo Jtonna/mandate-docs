@@ -1,45 +1,47 @@
-//! Composition root: `mandate validate <mandate-file> --root <dir>`.
+//! Composition root: `mandate [--root <dir>] [<mandate-file>.yaml ...]`.
 
-use std::fs;
 use std::process::ExitCode;
 
-use mandate::adapters::cli::{execute, parse_args};
-use mandate::adapters::fs_tree::FsFileTree;
+use mandate::adapters::cli::{exit_code, parse_args, render};
+use mandate::adapters::fs_file_tree_source::FsFileTreeSource;
+use mandate::adapters::fs_mandate_store::FsMandateStore;
+use mandate::adapters::yaml::YamlMandateParser;
+use mandate::application::run_mandates::RunMandates;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let invocation = match parse_args(&args) {
         Ok(invocation) => invocation,
-        Err(message) => return fail(message),
-    };
-    let text = match fs::read_to_string(&invocation.mandate_path) {
-        Ok(text) => text,
-        Err(err) => {
-            return fail(format!(
-                "failed to read '{}': {err}",
-                invocation.mandate_path
-            ))
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::FAILURE;
         }
     };
 
-    let tree = FsFileTree::new(invocation.root);
-    let mut stdout = std::io::stdout();
-    let mut stderr = std::io::stderr();
-    let code = execute(
-        &invocation.mandate_path,
-        &text,
-        &tree,
-        &mut stdout,
-        &mut stderr,
-    );
-    if code == 0 {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
-}
+    let start_dir = match invocation.root {
+        Some(root) => root,
+        None => match std::env::current_dir() {
+            Ok(dir) => dir,
+            Err(err) => {
+                eprintln!("failed to determine current directory: {err}");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
 
-fn fail(message: impl AsRef<str>) -> ExitCode {
-    eprintln!("{}", message.as_ref());
-    ExitCode::FAILURE
+    let source = FsFileTreeSource;
+    let store = FsMandateStore;
+    let parser = YamlMandateParser;
+    let run = RunMandates::new(&source, &store, &parser);
+
+    match run.execute(&start_dir, &invocation.mandates) {
+        Ok(report) => {
+            render(&report, &mut std::io::stdout());
+            ExitCode::from(exit_code(&report) as u8)
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            ExitCode::FAILURE
+        }
+    }
 }
