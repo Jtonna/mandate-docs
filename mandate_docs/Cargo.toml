@@ -1,0 +1,11 @@
+[package]
+name = "mandate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+yaml_serde = "0.10.7"
+
+[dev-dependencies]
+tempfile = "3.27.0"
