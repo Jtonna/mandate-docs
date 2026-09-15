@@ -4,7 +4,7 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::domain::file_tree::FileTreeSnapshot;
+use crate::domain::model::file_tree::FileTreeSnapshot;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceError(pub String);

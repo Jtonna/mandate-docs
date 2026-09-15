@@ -4,7 +4,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::domain::run_report::RunReportMandatesValidation;
+use crate::domain::model::run_report::RunReportMandatesValidation;
 
 const USAGE: &str = "usage: mandate [--root <dir>] [<mandate-file>.yaml ...]";
 
@@ -50,7 +50,7 @@ pub fn render(report: &RunReportMandatesValidation, out: &mut dyn Write) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::run_report::{RunLocation, RunWarning};
+    use crate::domain::model::run_report::{RunLocation, RunWarning};
 
     fn args(strs: &[&str]) -> Vec<String> {
         strs.iter().map(|s| s.to_string()).collect()

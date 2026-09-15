@@ -7,14 +7,16 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use mandate::adapters::driven::yaml::{parse_mandate, YamlMandateParser};
-use mandate::application::{RunError, RunMandates};
-use mandate::domain::file_tree::{EntryKind, FileTreeSnapshot};
-use mandate::domain::mandate::Mandate;
+use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::{
+    parse_mandate, YamlMandateParser,
+};
+use mandate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
+use mandate::domain::model::mandate::Mandate;
+use mandate::domain::model::run_report::RunReportMandatesValidation;
+use mandate::domain::model::validation::validate;
 use mandate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
 use mandate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
-use mandate::domain::run_report::RunReportMandatesValidation;
-use mandate::domain::validation::validate;
+use mandate::domain::usecases::run_mandates::{RunError, RunMandates};
 
 /// An in-memory repository-relative file tree. Also stands in as the
 /// mandate store: `with_mandate` records both the file's text (for
@@ -192,7 +194,7 @@ pub fn assert_fails(lines: Vec<String>, errors: &[&str]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mandate::domain::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
+    use mandate::domain::model::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
 
     fn mandate() -> Mandate {
         Mandate {

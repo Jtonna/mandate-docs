@@ -1,5 +1,5 @@
 use crate::support::*;
-use mandate::domain::run_report::RunWarning;
+use mandate::domain::model::run_report::RunWarning;
 
 #[test]
 fn no_mandate_files_warns_and_reports_zero() {

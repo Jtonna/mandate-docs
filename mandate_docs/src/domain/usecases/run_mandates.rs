@@ -6,14 +6,14 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::domain::file_tree::FileTreeSnapshot;
+use crate::domain::model::file_tree::FileTreeSnapshot;
+use crate::domain::model::run_report::{
+    MandateOutcome, MandateResult, RunLocation, RunReportMandatesValidation, RunWarning,
+};
+use crate::domain::model::validation::validate;
 use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
 use crate::domain::ports::driven::mandate_parser::MandateParser;
 use crate::domain::ports::driven::mandate_store::{MandateStore, StoreError};
-use crate::domain::run_report::{
-    MandateOutcome, MandateResult, RunLocation, RunReportMandatesValidation, RunWarning,
-};
-use crate::domain::validation::validate;
 
 /// Borrows its three ports for `'ports` and never owns them.
 pub struct RunMandates<'ports> {
@@ -223,13 +223,13 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::path::Path;
 
-    use crate::application::run_mandates::{RunError, RunMandates};
-    use crate::domain::file_tree::{EntryKind, FileTreeSnapshot};
-    use crate::domain::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
+    use crate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
+    use crate::domain::model::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
+    use crate::domain::model::run_report::{MandateResult, RunLocation, RunWarning};
     use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
     use crate::domain::ports::driven::mandate_parser::MandateParser;
     use crate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
-    use crate::domain::run_report::{MandateResult, RunLocation, RunWarning};
+    use crate::domain::usecases::run_mandates::{RunError, RunMandates};
 
     fn path_str(p: &Path) -> String {
         p.to_string_lossy().replace('\\', "/")

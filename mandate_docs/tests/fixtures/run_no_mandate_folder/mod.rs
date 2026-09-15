@@ -1,5 +1,5 @@
 use crate::support::*;
-use mandate::domain::run_report::RunLocation;
+use mandate::domain::model::run_report::RunLocation;
 
 #[test]
 fn no_mandate_folder_anywhere_up_warns_and_reports_zero() {

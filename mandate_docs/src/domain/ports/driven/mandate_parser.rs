@@ -3,7 +3,7 @@
 //! application can read mandate text and parse it without depending on the
 //! YAML adapter directly.
 
-use crate::domain::mandate::Mandate;
+use crate::domain::model::mandate::Mandate;
 
 pub trait MandateParser {
     /// Parses `text` into a [`Mandate`]. On failure, a human-readable

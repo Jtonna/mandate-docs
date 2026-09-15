@@ -2,11 +2,11 @@
 
 use std::process::ExitCode;
 
-use mandate::adapters::driven::fs_file_tree_source::FsFileTreeSource;
-use mandate::adapters::driven::fs_mandate_store::FsMandateStore;
-use mandate::adapters::driven::yaml::YamlMandateParser;
+use mandate::adapters::driven::file_tree::fs_file_tree_source::FsFileTreeSource;
+use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::YamlMandateParser;
+use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
 use mandate::adapters::driving::cli::{parse_args, render};
-use mandate::application::run_mandates::RunMandates;
+use mandate::domain::usecases::run_mandates::RunMandates;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

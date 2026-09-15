@@ -5,7 +5,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::domain::file_tree::{EntryKind, FileTreeSnapshot};
+use crate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
 use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
 
 pub struct FsFileTreeSource;

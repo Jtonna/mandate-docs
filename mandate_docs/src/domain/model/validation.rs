@@ -166,7 +166,7 @@ pub fn validate(mandate: &Mandate, snapshot: &FileTreeSnapshot) -> ValidationRep
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
+    use crate::domain::model::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
 
     fn rule(id: &str) -> Rule {
         Rule {
@@ -298,7 +298,10 @@ mod tests {
         let mandate = valid_mandate();
         let mut snapshot = FileTreeSnapshot::with_every_file_in(&mandate);
         snapshot.remove("docs/a.md");
-        snapshot.insert("docs/a.md", crate::domain::file_tree::EntryKind::Directory);
+        snapshot.insert(
+            "docs/a.md",
+            crate::domain::model::file_tree::EntryKind::Directory,
+        );
 
         let report = validate(&mandate, &snapshot);
 

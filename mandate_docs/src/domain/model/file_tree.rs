@@ -102,7 +102,7 @@ impl FileTreeSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
+    use crate::domain::model::mandate::{CodeLink, GovernedDoc, Rule, RuleKind};
 
     fn mandate() -> Mandate {
         Mandate {

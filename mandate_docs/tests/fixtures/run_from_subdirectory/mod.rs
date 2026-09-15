@@ -1,5 +1,5 @@
 use crate::support::*;
-use mandate::domain::run_report::RunLocation;
+use mandate::domain::model::run_report::RunLocation;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 

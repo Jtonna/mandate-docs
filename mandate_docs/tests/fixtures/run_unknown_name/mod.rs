@@ -1,5 +1,5 @@
 use crate::support::*;
-use mandate::application::RunError;
+use mandate::domain::usecases::run_mandates::RunError;
 
 const MANDATE: &str = include_str!("mandate.yaml");
 

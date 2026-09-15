@@ -5,8 +5,8 @@
 use std::fs;
 use std::path::Path;
 
-use mandate::adapters::driven::fs_file_tree_source::FsFileTreeSource;
-use mandate::adapters::driven::fs_mandate_store::FsMandateStore;
+use mandate::adapters::driven::file_tree::fs_file_tree_source::FsFileTreeSource;
+use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
 use mandate::domain::ports::driven::file_tree_source::FileTreeSource;
 use mandate::domain::ports::driven::mandate_store::MandateStore;
 

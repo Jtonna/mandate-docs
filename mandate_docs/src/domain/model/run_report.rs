@@ -128,7 +128,7 @@ impl RunReportMandatesValidation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::validation::{ValidationError, ValidationWarning};
+    use crate::domain::model::validation::{ValidationError, ValidationWarning};
 
     fn valid_report() -> ValidationReport {
         ValidationReport {

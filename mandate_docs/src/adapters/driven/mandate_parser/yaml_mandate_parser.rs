@@ -4,7 +4,7 @@
 use serde::Deserialize;
 use std::fmt;
 
-use crate::domain::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
+use crate::domain::model::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
 
 /// Everything that can go wrong turning mandate YAML text into a [`Mandate`].
 #[derive(Debug)]
@@ -72,7 +72,7 @@ struct CodeLinkDoc {
 /// Parses the text of a mandate YAML file into a [`Mandate`].
 ///
 /// Does not validate cross-references (unknown rule ids, ungoverned docs,
-/// missing files, ...); that is [`crate::domain::validation::validate`]'s
+/// missing files, ...); that is [`crate::domain::model::validation::validate`]'s
 /// job. This only checks that the YAML has the mandate shape: known fields,
 /// and each rule matching its declared `type`.
 pub fn parse_mandate(text: &str) -> Result<Mandate, ParseError> {
@@ -159,8 +159,8 @@ fn rule_from_doc(rule: RuleDoc) -> Result<Rule, ParseError> {
 }
 
 /// Adapts [`parse_mandate`] to the [`crate::domain::ports::driven::mandate_parser::MandateParser`]
-/// port, so the application layer can parse mandate text without depending
-/// on this module's serde types directly.
+/// port, so a use case can parse mandate text without depending on this
+/// module's serde types directly.
 pub struct YamlMandateParser;
 
 impl crate::domain::ports::driven::mandate_parser::MandateParser for YamlMandateParser {

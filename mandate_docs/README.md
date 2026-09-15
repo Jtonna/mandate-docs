@@ -18,15 +18,15 @@ repository does not yet carry one (see section 3):
   },
 
   "code": {
-    "AGp11cEp": "src/domain/mandate.rs",
-    "0HYahGqe": "src/domain/validation.rs",
+    "AGp11cEp": "src/domain/model/mandate.rs",
+    "0HYahGqe": "src/domain/model/validation.rs",
     "9O0dF9vv": "src/domain/ports/driven/file_tree_source.rs",
-    "dmgg5Era": "src/adapters/driven/yaml.rs",
-    "oYrdLikO": "src/adapters/driven/fs_mandate_store.rs",
-    "uhWvYLkM": "src/adapters/driven/fs_file_tree_source.rs",
-    "j70aaooT": "src/adapters/driving/cli.rs",
+    "dmgg5Era": "src/adapters/driven/mandate_parser/yaml_mandate_parser.rs",
+    "oYrdLikO": "src/adapters/driven/mandate_store/fs_mandate_store.rs",
+    "uhWvYLkM": "src/adapters/driven/file_tree/fs_file_tree_source.rs",
+    "j70aaooT": "src/adapters/driving/cli/mod.rs",
     "1heIzw3j": "src/main.rs",
-    "2rXErShe": "tests/file_tree_contract.rs",
+    "2rXErShe": "tests/fs_adapters.rs",
     "JTBXrGc3": "tests/fixtures/doc_missing/mod.rs",
     "r7yc78R9": "tests/fixtures/support.rs"
   },
@@ -148,11 +148,11 @@ Resolved, one branch of the chain is:
 ```
 6aQ5ztd2  .mandate/mandates/Mandate_Parser.yaml
   NoZvYf6I  docs/architecture/mandate-parser.md
-      AGp11cEp  src/domain/mandate.rs
-      0HYahGqe  src/domain/validation.rs
+      AGp11cEp  src/domain/model/mandate.rs
+      0HYahGqe  src/domain/model/validation.rs
       1heIzw3j  src/main.rs
   vX2qsQpN  docs/sop/handling-mandates.md
-      0HYahGqe  src/domain/validation.rs
+      0HYahGqe  src/domain/model/validation.rs
       1heIzw3j  src/main.rs
 ```
 
@@ -212,25 +212,30 @@ docs/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
   domain/                     business logic: models, ports, invariants
-    mandate.rs                Mandate, Rule, RuleKind, GovernedDoc, CodeLink
-    file_tree.rs              FileTreeSnapshot, EntryKind
-    validation.rs             validation logic, errors, warnings
-    run_report.rs             RunReportMandatesValidation, MandateOutcome
+    model/
+      mandate.rs              Mandate, Rule, RuleKind, GovernedDoc, CodeLink
+      file_tree.rs            FileTreeSnapshot, EntryKind
+      validation.rs           validation logic, errors, warnings
+      run_report.rs           RunReportMandatesValidation, MandateOutcome
+    usecases/
+      run_mandates.rs         RunMandates use case
     ports/
       driven/
         file_tree_source.rs   FileTreeSource port
         mandate_store.rs      MandateStore port
         mandate_parser.rs     MandateParser port
       driving/                reserved for future driving ports
-  application/                use cases; imports domain only
-    run_mandates.rs           RunMandates use case
   adapters/                   external integration
     driving/
-      cli.rs                  command-line interface
+      cli/
+        mod.rs                command-line interface
     driven/
-      fs_file_tree_source.rs  FileTreeSource implementation
-      fs_mandate_store.rs     MandateStore implementation
-      yaml.rs                 MandateParser implementation
+      file_tree/
+        fs_file_tree_source.rs  FileTreeSource implementation
+      mandate_store/
+        fs_mandate_store.rs   MandateStore implementation
+      mandate_parser/
+        yaml_mandate_parser.rs  MandateParser implementation
   main.rs                     composition root
   lib.rs                      module declarations
 tests/                        integration tests
@@ -393,8 +398,8 @@ way, from a list of documents into a map keyed by document ID. Paths become IDs
 in both cases.
 
 ```
-mandate                          mandate.json
-  code: src/domain/validation.rs   docs_code:
+mandate                            mandate.json
+  code: src/domain/model/validation.rs   docs_code:
     docs: [mandate-parser.md]        NoZvYf6I: [0HYahGqe, ...]
 ```
 
@@ -539,7 +544,7 @@ delete it and sync again.
 The obvious design is to write paths directly into the mapping:
 
 ```json
-"src/domain/validation.rs": [
+"src/domain/model/validation.rs": [
   "docs/architecture/mandate-parser.md",
   "docs/sop/handling-mandates.md"
 ]
@@ -729,7 +734,7 @@ technology:
 | `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
-The command line is a driving adapter in `src/adapters/driving/cli.rs`, with its own
+The command line is a driving adapter in `src/adapters/driving/cli/mod.rs`, with its own
 in-file unit tests. No test runs the built binary, because the binary will
 gain startup side effects.
 
@@ -901,7 +906,7 @@ living in `mandate.json`:
 
 ```bash
 git diff -M --name-status <old-ref> <new-ref>
-# R096    src/domain/mandate.rs    src/core/mandate.rs
+# R096    src/domain/model/mandate.rs    src/core/mandate.rs
 ```
 
 Git recomputes renames heuristically at diff time by fingerprinting files in

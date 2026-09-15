@@ -278,10 +278,10 @@ function buildApp(config: Config) {
 src/
 ├── domain/                  # inside the hexagon
 │   ├── model/               #   entities, value objects, domain errors
+│   ├── usecases/            #   application services / workflows
 │   └── ports/               #   ALL interfaces (owned by the core)
 │       ├── driven/          #     repositories, gateways, notifiers
 │       └── driving/         #     use-case interfaces (optional)
-├── application/             # use cases / workflows; imports domain only
 ├── adapters/                # outside the hexagon
 │   ├── driving/
 │   │   ├── http/            #   controllers, routes, request mappers
@@ -427,14 +427,14 @@ invoicing/
 │   ├── model/
 │   │   ├── invoice.ts             # Invoice aggregate: line items, status rules
 │   │   └── money.ts               # value object
+│   ├── usecases/
+│   │   ├── issue-invoice.ts       # validate → persist → charge → notify
+│   │   └── void-invoice.ts
 │   └── ports/
 │       ├── invoice-repository.ts
 │       ├── payment-gateway.ts
 │       ├── invoice-notifier.ts
 │       └── clock.ts
-├── application/
-│   ├── issue-invoice.ts           # validate → persist → charge → notify
-│   └── void-invoice.ts
 ├── adapters/
 │   ├── driving/
 │   │   ├── http/invoice-controller.ts
@@ -458,7 +458,7 @@ invoicing/
 **New rule: "invoices over $10,000 require a second approver."**
 
 1. `domain/model/invoice.ts` — add the invariant to `Invoice.issue()`.
-2. `application/issue-invoice.ts` — handle the new `ApprovalRequired` outcome.
+2. `domain/usecases/issue-invoice.ts` — handle the new `ApprovalRequired` outcome.
 3. `adapters/driving/http` — map `ApprovalRequired` to a `409` response.
 4. Ports, database adapter, Stripe adapter: **untouched.**
 

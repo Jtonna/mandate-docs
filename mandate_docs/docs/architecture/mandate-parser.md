@@ -13,41 +13,41 @@ Those remain out of scope, as recorded in `README.md` section 5.
 
 The crate follows `docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md`, scaled to
 the size of the problem: three driven ports, three adapters, and one
-application-layer use case that owns discovery, selection and reporting.
+domain/usecases use case that owns discovery, selection and reporting.
 
 | File | Layer | Role |
 |---|---|---|
-| `src/domain/mandate.rs` | domain | Plain data types for a mandate: `Mandate`, `Rule`, `RuleKind`, `GovernedDoc`, `CodeLink`. No serde, no I/O. |
-| `src/domain/file_tree.rs` | domain | `FileTreeSnapshot`, a value recording every file and directory under a root at one point in time. `EntryKind` distinguishes a file from a directory. |
-| `src/domain/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `&FileTreeSnapshot`. `ValidationReport::lines` renders the report one line per finding. |
-| `src/domain/run_report.rs` | domain | `RunReportMandatesValidation`, the report for one run: root, snapshot entry count, warnings, and one outcome per mandate. `is_valid()` and `lines()`. |
+| `src/domain/model/mandate.rs` | domain | Plain data types for a mandate: `Mandate`, `Rule`, `RuleKind`, `GovernedDoc`, `CodeLink`. No serde, no I/O. |
+| `src/domain/model/file_tree.rs` | domain | `FileTreeSnapshot`, a value recording every file and directory under a root at one point in time. `EntryKind` distinguishes a file from a directory. |
+| `src/domain/model/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `&FileTreeSnapshot`. `ValidationReport::lines` renders the report one line per finding. |
+| `src/domain/model/run_report.rs` | domain | `RunReportMandatesValidation`, the report for one run: root, snapshot entry count, warnings, and one outcome per mandate. `is_valid()` and `lines()`. |
 | `src/domain/ports/driven/file_tree_source.rs` | port | `FileTreeSource`, snapshots a root and cheaply checks whether one directory holds another. |
 | `src/domain/ports/driven/mandate_store.rs` | port | `MandateStore`, lists and reads mandate files under a root. |
 | `src/domain/ports/driven/mandate_parser.rs` | port | `MandateParser`, turns mandate text into a `Mandate`. |
-| `src/application/run_mandates.rs` | application | `RunMandates`, the use case: discovers the project root, takes the snapshot, selects mandates, parses and validates each, and fills the report. `RunError` for its failure modes. |
-| `src/adapters/driven/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
-| `src/adapters/driven/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
-| `src/adapters/driven/yaml.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`, plus `ParseError`. Turns mandate YAML text into a `Mandate`. |
-| `src/adapters/driving/cli.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
+| `src/domain/usecases/run_mandates.rs` | domain | `RunMandates`, the use case: discovers the project root, takes the snapshot, selects mandates, parses and validates each, and fills the report. `RunError` for its failure modes. |
+| `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
+| `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
+| `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`, plus `ParseError`. Turns mandate YAML text into a `Mandate`. |
+| `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
-| `src/lib.rs` | composition root | Declares the `adapters`, `application` and `domain` modules. |
+| `src/lib.rs` | composition root | Declares the `adapters`, `domain` and `domain::usecases` modules. |
 
-Dependencies point one way: the adapters, the application layer and the
-composition root import the domain; the domain imports nothing outside
+Dependencies point one way: the adapters, the domain/usecases and the
+composition root import the rest of the domain; the domain imports nothing outside
 `std`. `FileTreeSource`, `MandateStore` and `MandateParser` are driven ports
 because `RunMandates` calls them to reach the filesystem and the YAML
-parser; `src/adapters/driving/cli.rs` is the sole driving adapter, since nothing
+parser; `src/adapters/driving/cli/mod.rs` is the sole driving adapter, since nothing
 else calls into the crate yet.
 
 Tests follow the split in `README.md` section 10, step 3:
 
 | File | Kind | What it covers |
 |---|---|---|
-| `src/adapters/driven/yaml.rs` | unit, in-file | The five parse-error cases, with inline YAML. |
-| `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
-| `src/application/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
+| `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | unit, in-file | The five parse-error cases, with inline YAML. |
+| `src/domain/model/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
+| `src/domain/usecases/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
 | `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories. |
-| `src/adapters/driving/cli.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
+| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTreeSource` and `MandateStore`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 
@@ -55,9 +55,9 @@ Tests never read `docs/`, and no test runs the built binary. This repository
 has no `.mandate/` folder to read.
 
 The `serde`-derived structs (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`,
-`CodeLinkDoc`) live only in `src/adapters/driven/yaml.rs` and never leave that
+`CodeLinkDoc`) live only in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` and never leave that
 module. `parse_mandate` maps each one into the plain domain types in
-`src/domain/mandate.rs` before returning. This follows the guide's rule that
+`src/domain/model/mandate.rs` before returning. This follows the guide's rule that
 no library type may enter the domain: the domain types carry no `serde`
 attributes and would compile unchanged if the YAML library were replaced.
 
@@ -91,7 +91,7 @@ fn read(&self, root: &Path, file_name: &str) -> Result<MandateFile, StoreError>;
 `FsMandateStore` is the sole adapter.
 
 `MandateParser` has one method, turning mandate text into a `Mandate` or a
-parse error; `YamlMandateParser` in `src/adapters/driven/yaml.rs` is the sole
+parse error; `YamlMandateParser` in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` is the sole
 adapter, and is described in full in "What parsing rejects" below.
 
 `FakeVirtualMachine` in `tests/fixtures/support.rs` implements both
@@ -100,7 +100,7 @@ naturally sets up a repository's files and its mandate texts together.
 
 ## The run command
 
-`RunMandates` in `src/application/run_mandates.rs` is the use case behind
+`RunMandates` in `src/domain/usecases/run_mandates.rs` is the use case behind
 `mandate [--root <dir>] [<file>.yaml ...]`.
 
 **Discovery.** With no `--root`, discovery starts at the current directory.
@@ -143,7 +143,7 @@ warning is not a failure.
 
 ## The report
 
-`RunReportMandatesValidation` in `src/domain/run_report.rs` is the domain
+`RunReportMandatesValidation` in `src/domain/model/run_report.rs` is the domain
 value the run command produces. Fields: `location` (a `RunLocation` enum
 with variants `Found { root, snapshot_entries }` or
 `NotFound { searched_from }`), `warnings` (a `Vec<RunWarning>`), and
@@ -193,7 +193,7 @@ total mandates checked and how many were invalid.
 
 ## What parsing rejects
 
-`parse_mandate` in `src/adapters/driven/yaml.rs` turns mandate YAML text into a
+`parse_mandate` in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` turns mandate YAML text into a
 `Mandate`, or fails with one of two errors:
 
 - `ParseError::Malformed`, wrapping the underlying `yaml_serde::Error`. This
@@ -214,7 +214,7 @@ instead, once a `Mandate` value exists to check.
 
 ## What validation checks
 
-`validate` in `src/domain/validation.rs` takes a `Mandate` and a
+`validate` in `src/domain/model/validation.rs` takes a `Mandate` and a
 `&FileTreeSnapshot` and returns a `ValidationReport { errors, warnings, ... }`
 built in one pass: every check in the function runs regardless of what
 earlier checks found. `report.is_valid()` is `true` exactly when `errors`
@@ -334,14 +334,14 @@ to run it against.
 Exit codes: `0` when every selected mandate is valid, including the cases
 of an empty mandates folder and a missing `.mandate` folder (both warnings,
 not failures); `1` when any mandate failed to parse or validated with errors,
-or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cli.rs`
+or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cli/mod.rs`
 produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
 message when the command line does not match that shape.
 
 `cargo test` runs 77 tests: 46 unit tests under `src/` (6 in
-`adapters::cli::tests`, 5 in `adapters::yaml::tests`, 5 in
-`domain::file_tree::tests`, 5 in `domain::run_report::tests`, 13 in
-`domain::validation::tests`, 12 in `application::run_mandates::tests`),
+`adapters::driving::cli::tests`, 5 in `adapters::driven::mandate_parser::yaml_mandate_parser::tests`, 5 in
+`domain::model::file_tree::tests`, 5 in `domain::model::run_report::tests`, 13 in
+`domain::model::validation::tests`, 12 in `domain::usecases::run_mandates::tests`),
 10 in `tests/fs_adapters.rs`, and 21 in the `fixtures` target: 12 across
 the nine validation cases, 6 across the six run cases, and 3 for the
 support module.
@@ -361,7 +361,7 @@ support module.
   Partial coverage is the normal state (`README.md` section 4).
 - Empty `governs` and empty `code` lists are not errors. Only an empty
   `rules` list is (`ValidationError::NoRules`).
-- The CLI is a driving adapter tested in-process, in `src/adapters/driving/cli.rs`
+- The CLI is a driving adapter tested in-process, in `src/adapters/driving/cli/mod.rs`
   itself, rather than through the built binary. The binary will gain
   startup side effects of its own, so no test launches it; `parse_args`
   and `render` are exercised directly instead. The exit code mapping
