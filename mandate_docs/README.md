@@ -272,7 +272,8 @@ A **mandate** is a file in `.mandate/mandates/`. It links documentation to the
 code it describes, and it carries the rules that keep that documentation honest.
 
 Read the example mandate shown in the intro, `Mandate_Parser.yaml`, alongside
-this section; the fixture cases under `tests/` carry copies of it.
+this section; the fixture cases under `tests/` use a separate mandate for a
+fictional todo app instead, described in section 10 step 3.
 
 A mandate is a middleman. It sits between documents and source files, and it
 adds the one thing a plain link cannot carry: how the documentation is
@@ -739,8 +740,11 @@ check it proves, holding `mod.rs` and `mandate.yaml`; the test builds a
 fake virtual machine from the mandate with the support module, edits
 files or the parsed mandate, and asserts the exact report, so a case can
 prove several things and each test's name says whether it passes or
-fails. A case is registered with one `mod` line in `tests/fixtures/main.rs`,
-the same way `src/` declares modules.
+fails. Every fixture `mandate.yaml` describes a fictional todo app that
+does not exist and needs no path in it to exist on disk, so a case is
+never confused for real documentation of this repository. A case is
+registered with one `mod` line in `tests/fixtures/main.rs`, the same way
+`src/` declares modules.
 
 Output: the diff and a green suite. The test command and its output are kept
 for step 7.

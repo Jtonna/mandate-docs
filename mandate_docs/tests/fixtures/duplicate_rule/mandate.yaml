@@ -1,44 +1,27 @@
-# Mandate_Parser
+# Fixture data for the duplicate_rule test case.
 #
-# A mandate is self-contained. It declares its own linkage, so the whole system
-# can be rebuilt by parsing every file in .mandate/mandates/.
-#
-# .mandate/mandate.json is a serialised copy of that same data, kept for fast
-# rebuilds. This file is the source of truth; mandate.json is derived from it.
+# This describes a fictional command-line todo app that does not exist.
+# FakeVirtualMachine::with_every_file_in builds a fake file tree from
+# these links, so no path here needs to exist on disk. This is not a
+# mandate for this repository.
 
-name: Mandate_Parser
+name: Todo_App
 
-# Human-facing only. Says what this mandate is meant to cover, for whoever opens
-# the file. It is not passed to agents when rules run, so it cannot influence a
-# result. Optional, and entirely up to the author how or whether to use it.
+# Human-facing only. Says what this mandate is meant to cover, for whoever
+# opens the file. It is not passed to agents when rules run.
 description: >
-  Covers the mandate parser and validator in src/, and the procedure for
-  handling mandate files. Does not cover mandate.json generation, scanning,
-  or rule execution, none of which exist.
+  Covers the todo list domain and CLI in src/, and the procedure for
+  adding a task.
 
-# Rules are defined once and referenced by id from the documents they apply to.
-# At least one rule is required.
-#
-# No scripts/ folder exists in this repository, so every rule here is
-# type: agent rather than type: script; a script rule pointing at a missing
-# script would itself be a false claim.
-#
-#   type: script  - runs a command. Deterministic. Exit 0 passes.
-#   type: agent   - runs a prompt against an AI agent. A judgement, and may
-#                   vary between runs.
-#
-# A rule's description is human-facing, like the mandate's. Only prompt is sent
-# to the agent, so editing a description can never change a result.
+# Rules are defined once and referenced by id from the documents they
+# apply to. At least one rule is required.
 rules:
   - id: claims-match-code
     type: agent
     description: Documented behaviour matches what the code actually does.
     prompt: >
-      Read the document and the source files linked to it. For every factual
-      claim the document makes about behaviour, check it against the code.
-      Report each claim the code contradicts, quoting the document line and the
-      source file and line that disagrees with it. Do not report stylistic
-      differences or missing detail, only contradictions.
+      Read the document and the linked source. Report any claim the code
+      contradicts.
 
   - id: claims-match-code
     type: agent
@@ -51,79 +34,72 @@ rules:
     type: agent
     description: The SOP has the sections an SOP requires and names an owner.
     prompt: >
-      Confirm the document has the sections Purpose, Scope, Owner and Steps,
-      in that order, and that Owner names a person. Report any that is
-      missing, out of order, or empty.
+      Confirm the document has Purpose, Scope, Owner and Steps in order,
+      and that Owner names a person.
 
   - id: commands-work
     type: agent
     description: Every command the document shows behaves as described.
     prompt: >
-      List every shell command the document shows. For each, confirm from the
-      linked source files that the command, its flags, its printed messages
-      and its exit codes match what the document says. Report each mismatch,
-      quoting the document line and the source line.
+      Check each shown command against the linked source. Report any
+      mismatch in flags, output or exit code.
 
 # The documents this mandate governs, and which rules apply to each.
-# Paths are relative to the repository root. Markdown files in this repository
-# only; external documentation is not supported.
 governs:
-  - doc: docs/architecture/mandate-parser.md
+  - doc: docs/architecture/todo-list.md
     rules:
       - claims-match-code
 
-  - doc: docs/sop/handling-mandates.md
+  - doc: docs/sop/adding-a-task.md
     rules:
       - sop-shape
       - commands-work
       - claims-match-code
 
 # The source files, and which of the documents above each one links to.
-# This is what a rule reads when it needs to check a document against code.
 code:
-  - path: src/domain/mandate.rs
+  - path: src/todo/task.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/architecture/todo-list.md
 
-  - path: src/domain/validation.rs
+  - path: src/todo/list.rs
     docs:
-      - docs/architecture/mandate-parser.md
-      - docs/sop/handling-mandates.md
+      - docs/architecture/todo-list.md
 
-  - path: src/domain/ports/driven/file_tree_source.rs
+  - path: src/todo/ports/task_store.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/architecture/todo-list.md
 
-  - path: src/adapters/driven/yaml.rs
+  - path: src/adapters/driven/json_task_store.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/architecture/todo-list.md
 
-  - path: src/adapters/driven/fs_mandate_store.rs
+  - path: src/adapters/driven/clock.rs
     docs:
-      - docs/architecture/mandate-parser.md
-
-  - path: src/adapters/driven/fs_file_tree_source.rs
-    docs:
-      - docs/architecture/mandate-parser.md
-
-  - path: src/main.rs
-    docs:
-      - docs/architecture/mandate-parser.md
-      - docs/sop/handling-mandates.md
+      - docs/architecture/todo-list.md
 
   - path: src/adapters/driving/cli.rs
     docs:
-      - docs/architecture/mandate-parser.md
-      - docs/sop/handling-mandates.md
+      - docs/architecture/todo-list.md
+      - docs/sop/adding-a-task.md
 
-  - path: tests/fs_adapters.rs
+  - path: src/main.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/architecture/todo-list.md
+      - docs/sop/adding-a-task.md
 
   - path: tests/fixtures/support.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/architecture/todo-list.md
 
-  - path: tests/fixtures/doc_missing/mod.rs
+  - path: tests/adding_a_task.rs
     docs:
-      - docs/architecture/mandate-parser.md
+      - docs/sop/adding-a-task.md
+
+  - path: docs/examples/sample-list.json
+    docs:
+      - docs/sop/adding-a-task.md
+
+  - path: scripts/check-commands.sh
+    docs:
+      - docs/sop/adding-a-task.md

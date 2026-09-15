@@ -5,7 +5,7 @@ const MANDATE: &str = include_str!("mandate.yaml");
 #[test]
 fn selecting_one_name_runs_only_it() {
     let mandate_a = parse(MANDATE);
-    let text_b = MANDATE.replacen("name: Mandate_Parser", "name: Mandate_Parser_Two", 1);
+    let text_b = MANDATE.replacen("name: Todo_App", "name: Todo_App_Two", 1);
 
     let vm = FakeVirtualMachine::with_every_file_in(&mandate_a)
         .with_mandate("a.yaml", MANDATE)
