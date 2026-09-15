@@ -2,7 +2,7 @@
 
 use std::process::ExitCode;
 
-use mandate::adapters::cli::{exit_code, parse_args, render};
+use mandate::adapters::cli::{parse_args, render};
 use mandate::adapters::fs_file_tree_source::FsFileTreeSource;
 use mandate::adapters::fs_mandate_store::FsMandateStore;
 use mandate::adapters::yaml::YamlMandateParser;
@@ -37,7 +37,11 @@ fn main() -> ExitCode {
     match run.execute(&start_dir, &invocation.mandates) {
         Ok(report) => {
             render(&report, &mut std::io::stdout());
-            ExitCode::from(exit_code(&report) as u8)
+            if report.is_valid() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
         }
         Err(err) => {
             eprintln!("{err}");

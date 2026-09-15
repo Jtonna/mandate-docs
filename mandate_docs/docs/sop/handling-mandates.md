@@ -59,7 +59,7 @@ Jacob Tonna
 
    | Message | What to do |
    |---|---|
-   | `no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. |
+   | `warning: no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. The run exits 0 with zero mandates checked. |
    | `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. |
    | `no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
    | `duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |

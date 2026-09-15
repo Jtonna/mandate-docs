@@ -14,6 +14,7 @@ mod no_rules;
 mod run_all;
 mod run_from_subdirectory;
 mod run_named;
+mod run_no_mandate_folder;
 mod run_no_mandates;
 mod run_unknown_name;
 mod ungoverned_doc;

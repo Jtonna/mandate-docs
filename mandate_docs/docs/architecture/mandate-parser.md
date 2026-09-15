@@ -28,7 +28,7 @@ application-layer use case that owns discovery, selection and reporting.
 | `src/adapters/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
 | `src/adapters/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
 | `src/adapters/yaml.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`, plus `ParseError`. Turns mandate YAML text into a `Mandate`. |
-| `src/adapters/cli.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. `exit_code` maps a report to a process exit code. None of the three does any I/O of its own. |
+| `src/adapters/cli.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
 | `src/lib.rs` | composition root | Declares the `adapters`, `application` and `domain` modules. |
 
@@ -47,7 +47,7 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
 | `src/application/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
 | `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories. |
-| `src/adapters/cli.rs` | unit, in-file | Argument parsing, `render` and `exit_code`, using in-memory writers and a hand-built report. No process is launched. |
+| `src/adapters/cli.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTreeSource` and `MandateStore`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 
@@ -108,16 +108,15 @@ naturally sets up a repository's files and its mandate texts together.
 `FileTreeSource::has_directory(dir, ".mandate")`, a cheap existence check
 that answers `false`, rather than erroring, when a directory cannot be
 read; if the check comes back false, it moves to the parent and repeats.
-Reaching the filesystem root without finding one is
-`RunError::NoMandateFolder`. It never looks inside child directories, so a
-nested project with its own `.mandate` is ignored. Only the ancestor that
-turns out to hold `.mandate` is ever snapshotted; every ancestor tried
-above it gets only the existence check, never a full walk of its tree.
-This is recorded in a comment beside `discover_root`: snapshotting every
-ancestor while searching meant walking directories the current user does
-not own, and a real run failed with "Access is denied" on an unrelated
-system temp folder before it could even report `.mandate` was never
-found.
+Reaching the filesystem root without finding one is not an error; the
+report prints a warning instead and exits 0. It never looks inside child
+directories, so a nested project with its own `.mandate` is ignored. Only
+the ancestor that turns out to hold `.mandate` is ever snapshotted; every
+ancestor tried above it gets only the existence check, never a full walk of
+its tree. This is recorded in a comment beside `discover_root`: snapshotting
+every ancestor while searching meant walking directories the current user
+does not own, and a real run failed with "Access is denied" on an unrelated
+system temp folder before it could even report `.mandate` was never found.
 
 **Snapshot.** `RunMandates` shares the one snapshot taken at the
 discovered root across every mandate validated in the run. `validate`
@@ -136,21 +135,23 @@ validated in turn. A parse failure is recorded in that mandate's slot as
 `MandateResult::ParseFailed`, and the run continues with the rest; it does
 not stop the run the way an unknown name does.
 
-**Exit codes.** `0` when every selected mandate parsed and validated
-clean. `1` if any mandate failed to parse or validated with errors. `1`
-also for `RunError::NoMandateFolder` and `RunError::UnknownMandate`, both
-reported before any mandate runs. `0` for an empty mandates folder, since a
+**Exit codes.** `0` when every selected mandate parsed and validated clean.
+`1` if any mandate failed to parse or validated with errors. `1` also for
+`RunError::UnknownMandate`, reported before any mandate runs. `0` for an
+empty mandates folder or when no `.mandate` folder is found, since a
 warning is not a failure.
 
 ## The report
 
 `RunReportMandatesValidation` in `src/domain/run_report.rs` is the domain
-value the run command produces. Fields: `root`, `snapshot_entries`,
-`warnings` (a `Vec<RunWarning>`), and `mandates` (a `Vec<MandateOutcome>`,
-one per selected mandate, each an `Enum` of `ParseFailed(String)` or
-`Validated(ValidationReport)`). `is_valid()` is `true` when no outcome is a
-parse failure and every `ValidationReport` is valid. `lines()` renders the
-whole report as one string per line, in the layout below.
+value the run command produces. Fields: `location` (a `RunLocation` enum
+with variants `Found { root, snapshot_entries }` or
+`NotFound { searched_from }`), `warnings` (a `Vec<RunWarning>`), and
+`mandates` (a `Vec<MandateOutcome>`, one per selected mandate, each an
+`Enum` of `ParseFailed(String)` or `Validated(ValidationReport)`). `is_valid()`
+is `true` when no outcome is a parse failure and every `ValidationReport` is
+valid. `lines()` renders the whole report as one string per line, in the
+layout below.
 
 Nothing prints during the run: `RunMandates` only fills the report, and the
 CLI's `render` writes it out once the run is finished.
@@ -158,7 +159,7 @@ CLI's `render` writes it out once the run is finished.
 The naming convention is `RunReport<Phase>`, so a later phase (rule
 execution) gets its own `RunReport` type rather than growing this one.
 
-Rendered layout:
+Rendered layout when `.mandate` is found:
 
 ```
 repository: <root>
@@ -174,6 +175,14 @@ Networking.yaml
   valid: 3 rules, 2 documents, 7 source files
 
 2 mandates checked, 1 invalid
+```
+
+When no `.mandate` folder is found from the starting directory upward:
+
+```
+warning: no .mandate folder found from <dir> up to the filesystem root
+
+0 mandates checked, 0 invalid
 ```
 
 Each mandate's block starts with its file name, then its `ValidationReport`
@@ -291,6 +300,7 @@ needs it; there is nothing else it is kept in sync with.
 | `run_unknown_name` | `unknown_name_errors_and_lists_both_available` builds a repo with two mandates, names a file that does not exist, and asserts `RunError::UnknownMandate` naming it and listing both `a.yaml` and `b.yaml` as available. | An unknown name is an error before anything runs. |
 | `run_from_subdirectory` | `starts_below_root_and_finds_it_by_walking_up` builds a repo with a `.mandate` folder at `/repo` and starts discovery from `/repo/src`; asserts the report's root is `/repo` and the run is valid. | Discovery climbs from the starting directory to the nearest ancestor with `.mandate`. |
 | `run_no_mandates` | `no_mandate_files_warns_and_reports_zero` builds a repo with an empty `.mandate/mandates` folder; asserts `RunWarning::NoMandatesFound` naming the mandates directory, zero mandates in the report, and that the run is valid. | An empty mandates folder is a warning, not a failure. |
+| `run_no_mandate_folder` | `no_mandate_folder_anywhere_up_warns_and_reports_zero` starts discovery from a directory with no `.mandate` in any ancestor; asserts the warning message naming the starting directory, zero mandates in the report, and exit 0. | Finding no `.mandate` folder is a warning, not a failure. |
 
 ## Running it
 
@@ -316,20 +326,19 @@ mandate --root /path/to/project
 This repository has no mandate of its own yet, so there is nothing here
 to run it against.
 
-Exit codes: `0` when every selected mandate is valid, including the case
-of an empty mandates folder (a warning, not a failure); `1` when any
-mandate failed to parse or validated with errors, when no `.mandate`
-folder was found, or when a named mandate does not exist. `parse_args` in
-`src/adapters/cli.rs` produces the `usage: mandate [--root <dir>]
-[<mandate-file>.yaml ...]` message when the command line does not match
-that shape.
+Exit codes: `0` when every selected mandate is valid, including the cases
+of an empty mandates folder and a missing `.mandate` folder (both warnings,
+not failures); `1` when any mandate failed to parse or validated with errors,
+or when a named mandate does not exist. `parse_args` in `src/adapters/cli.rs`
+produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
+message when the command line does not match that shape.
 
-`cargo test` runs 77 tests: 47 unit tests under `src/` (8 in
+`cargo test` runs 77 tests: 46 unit tests under `src/` (6 in
 `adapters::cli::tests`, 5 in `adapters::yaml::tests`, 5 in
-`domain::file_tree::tests`, 4 in `domain::run_report::tests`, 13 in
+`domain::file_tree::tests`, 5 in `domain::run_report::tests`, 13 in
 `domain::validation::tests`, 12 in `application::run_mandates::tests`),
-10 in `tests/fs_adapters.rs`, and 20 in the `fixtures` target: 12 across
-the nine validation cases, 5 across the five run cases, and 3 for the
+10 in `tests/fs_adapters.rs`, and 21 in the `fixtures` target: 12 across
+the nine validation cases, 6 across the six run cases, and 3 for the
 support module.
 
 ## Decisions
@@ -349,8 +358,9 @@ support module.
   `rules` list is (`ValidationError::NoRules`).
 - The CLI is a driving adapter tested in-process, in `src/adapters/cli.rs`
   itself, rather than through the built binary. The binary will gain
-  startup side effects of its own, so no test launches it; `parse_args`,
-  `render` and `exit_code` are exercised directly instead.
+  startup side effects of its own, so no test launches it; `parse_args`
+  and `render` are exercised directly instead. The exit code mapping
+  lives in `main.rs` as one `if` on `is_valid()` and is not unit tested.
 - Validation behaviour is proven by fixture cases inside one test target,
   each a directory with its mandate and its tests, built on one shared
   fake virtual machine, so a case is cheap to add and can prove several
@@ -370,3 +380,5 @@ support module.
 - A run validates and reports every selected mandate rather than stopping
   at the first invalid one, matching the choice already made inside
   `validate` itself: an author sees every problem in one pass.
+- Finding no `.mandate` folder is a warning with exit 0, the same as an
+  empty mandates folder, since nothing to check is not a failure.

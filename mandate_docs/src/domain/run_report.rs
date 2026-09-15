@@ -20,16 +20,32 @@ pub enum RunWarning {
     NoMandatesFound { mandates_dir: String },
 }
 
+/// Where a run discovered its repository, or that it found none. There is
+/// no repository in the `NotFound` case, so there is no root path and no
+/// snapshot to report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunLocation {
+    Found {
+        root: String,
+        snapshot_entries: usize,
+    },
+    NotFound {
+        searched_from: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunReportMandatesValidation {
-    pub root: String,
-    pub snapshot_entries: usize,
+    pub location: RunLocation,
     pub warnings: Vec<RunWarning>,
     pub mandates: Vec<MandateOutcome>,
 }
 
 impl RunReportMandatesValidation {
     /// No mandate failed to parse, and every validated mandate is valid.
+    /// An empty `mandates` list is always valid, whether because no
+    /// `.mandate` folder was found or because the mandates folder was
+    /// empty.
     pub fn is_valid(&self) -> bool {
         self.mandates.iter().all(|outcome| match &outcome.result {
             MandateResult::ParseFailed(_) => false,
@@ -40,9 +56,23 @@ impl RunReportMandatesValidation {
     pub fn lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
-        lines.push(format!("repository: {}", self.root));
-        lines.push(format!("snapshot: {} entries", self.snapshot_entries));
-        lines.push(String::new());
+        match &self.location {
+            RunLocation::Found {
+                root,
+                snapshot_entries,
+            } => {
+                lines.push(format!("repository: {root}"));
+                lines.push(format!("snapshot: {snapshot_entries} entries"));
+                lines.push(String::new());
+            }
+            RunLocation::NotFound { searched_from } => {
+                lines.push(format!(
+                    "warning: no .mandate folder found from {searched_from} \
+                     up to the filesystem root"
+                ));
+                lines.push(String::new());
+            }
+        }
 
         for warning in &self.warnings {
             match warning {
@@ -124,11 +154,17 @@ mod tests {
         }
     }
 
+    fn found(root: &str, snapshot_entries: usize) -> RunLocation {
+        RunLocation::Found {
+            root: root.to_string(),
+            snapshot_entries,
+        }
+    }
+
     #[test]
     fn lines_renders_one_valid_and_one_invalid_mandate() {
         let run = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 42,
+            location: found("/repo", 42),
             warnings: Vec::new(),
             mandates: vec![
                 MandateOutcome {
@@ -165,8 +201,7 @@ mod tests {
     #[test]
     fn lines_renders_a_parse_failure() {
         let run = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 3,
+            location: found("/repo", 3),
             warnings: Vec::new(),
             mandates: vec![MandateOutcome {
                 file_name: "bad.yaml".to_string(),
@@ -192,8 +227,7 @@ mod tests {
     #[test]
     fn lines_renders_the_no_mandates_warning_with_zero_mandates() {
         let run = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 5,
+            location: found("/repo", 5),
             warnings: vec![RunWarning::NoMandatesFound {
                 mandates_dir: ".mandate/mandates".to_string(),
             }],
@@ -215,10 +249,32 @@ mod tests {
     }
 
     #[test]
+    fn lines_renders_not_found_with_no_repository_or_snapshot_lines() {
+        let run = RunReportMandatesValidation {
+            location: RunLocation::NotFound {
+                searched_from: "/repo/src".to_string(),
+            },
+            warnings: Vec::new(),
+            mandates: Vec::new(),
+        };
+
+        assert_eq!(
+            run.lines(),
+            vec![
+                "warning: no .mandate folder found from /repo/src up to \
+                 the filesystem root"
+                    .to_string(),
+                String::new(),
+                "0 mandates checked, 0 invalid".to_string(),
+            ]
+        );
+        assert!(run.is_valid());
+    }
+
+    #[test]
     fn is_valid_true_only_when_no_parse_failures_and_all_reports_valid() {
         let all_valid = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 1,
+            location: found("/repo", 1),
             warnings: Vec::new(),
             mandates: vec![MandateOutcome {
                 file_name: "a.yaml".to_string(),

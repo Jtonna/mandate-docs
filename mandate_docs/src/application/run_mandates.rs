@@ -11,17 +11,12 @@ use crate::domain::ports::file_tree_source::FileTreeSource;
 use crate::domain::ports::mandate_parser::MandateParser;
 use crate::domain::ports::mandate_store::MandateStore;
 use crate::domain::run_report::{
-    MandateOutcome, MandateResult, RunReportMandatesValidation, RunWarning,
+    MandateOutcome, MandateResult, RunLocation, RunReportMandatesValidation, RunWarning,
 };
 use crate::domain::validation::validate;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunError {
-    /// Walked from `searched_from` up to the filesystem root without ever
-    /// finding a directory entry named `.mandate` at that level.
-    NoMandateFolder {
-        searched_from: String,
-    },
     /// A name in `selected` is not among the mandate files the store lists
     /// for the discovered root. `available` is that full list.
     UnknownMandate {
@@ -35,10 +30,6 @@ pub enum RunError {
 impl fmt::Display for RunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RunError::NoMandateFolder { searched_from } => write!(
-                f,
-                "no .mandate folder found from {searched_from} up to the filesystem root"
-            ),
             RunError::UnknownMandate { name, available } => write!(
                 f,
                 "unknown mandate '{name}'; available mandates are: {}",
@@ -82,12 +73,26 @@ impl<'a> RunMandates<'a> {
     /// validates every mandate in `selected` (or every mandate the store
     /// lists, if `selected` is empty) against one shared snapshot of that
     /// root.
+    ///
+    /// Never finding a `.mandate` folder is not a failure: it means there
+    /// is nothing to check, the same as an empty mandates folder. The
+    /// report comes back `Ok` with a `NotFound` location, zero mandates
+    /// checked, and no store or snapshot calls made.
     pub fn execute(
         &self,
         start_dir: &Path,
         selected: &[String],
     ) -> Result<RunReportMandatesValidation, RunError> {
-        let (root, snapshot) = self.discover_root(start_dir)?;
+        let (root, snapshot) = match self.discover_root(start_dir)? {
+            DiscoverResult::Found { root, snapshot } => (root, snapshot),
+            DiscoverResult::NotFound { searched_from } => {
+                return Ok(RunReportMandatesValidation {
+                    location: RunLocation::NotFound { searched_from },
+                    warnings: Vec::new(),
+                    mandates: Vec::new(),
+                });
+            }
+        };
         let root_str = path_str(&root);
 
         let available = self
@@ -145,8 +150,10 @@ impl<'a> RunMandates<'a> {
         }
 
         Ok(RunReportMandatesValidation {
-            root: root_str,
-            snapshot_entries: snapshot.len(),
+            location: RunLocation::Found {
+                root: root_str,
+                snapshot_entries: snapshot.len(),
+            },
             warnings,
             mandates,
         })
@@ -161,7 +168,7 @@ impl<'a> RunMandates<'a> {
     // A directory that cannot be read simply answers `false` rather than
     // erroring, so an unreadable ancestor never stops the search, and only
     // the one level that turns out to be the root is ever snapshotted.
-    fn discover_root(&self, start_dir: &Path) -> Result<(PathBuf, FileTreeSnapshot), RunError> {
+    fn discover_root(&self, start_dir: &Path) -> Result<DiscoverResult, RunError> {
         let mut current = start_dir.to_path_buf();
         loop {
             let has_mandate = self
@@ -174,19 +181,33 @@ impl<'a> RunMandates<'a> {
                     .source
                     .snapshot(&current)
                     .map_err(|e| RunError::Source(e.to_string()))?;
-                return Ok((current, snapshot));
+                return Ok(DiscoverResult::Found {
+                    root: current,
+                    snapshot,
+                });
             }
 
             match current.parent() {
                 Some(parent) => current = parent.to_path_buf(),
                 None => {
-                    return Err(RunError::NoMandateFolder {
+                    return Ok(DiscoverResult::NotFound {
                         searched_from: path_str(start_dir),
                     })
                 }
             }
         }
     }
+}
+
+/// The outcome of walking up from a start directory looking for `.mandate`.
+enum DiscoverResult {
+    Found {
+        root: PathBuf,
+        snapshot: FileTreeSnapshot,
+    },
+    NotFound {
+        searched_from: String,
+    },
 }
 
 #[cfg(test)]
@@ -201,7 +222,7 @@ mod tests {
     use crate::domain::ports::file_tree_source::{FileTreeSource, SourceError};
     use crate::domain::ports::mandate_parser::MandateParser;
     use crate::domain::ports::mandate_store::{MandateFile, MandateStore, StoreError};
-    use crate::domain::run_report::{MandateResult, RunWarning};
+    use crate::domain::run_report::{MandateResult, RunLocation, RunWarning};
 
     fn path_str(p: &Path) -> String {
         p.to_string_lossy().replace('\\', "/")
@@ -387,7 +408,13 @@ mod tests {
 
         let report = run.execute(Path::new("/p"), &[]).unwrap();
 
-        assert_eq!(report.root, "/p");
+        assert_eq!(
+            report.location,
+            RunLocation::Found {
+                root: "/p".to_string(),
+                snapshot_entries: 2
+            }
+        );
         assert_eq!(source.has_directory_call_count(), 1);
         assert_eq!(source.snapshot_call_count(), 1);
     }
@@ -403,7 +430,13 @@ mod tests {
 
         let report = run.execute(Path::new("/p/a/b"), &[]).unwrap();
 
-        assert_eq!(report.root, "/p");
+        assert_eq!(
+            report.location,
+            RunLocation::Found {
+                root: "/p".to_string(),
+                snapshot_entries: 2
+            }
+        );
         // One existence check per level walked (/p/a/b, /p/a, /p), but the
         // full tree is only ever snapshotted once, at the level that
         // actually turned out to be the root.
@@ -412,36 +445,40 @@ mod tests {
     }
 
     #[test]
-    fn not_found_errors_no_mandate_folder() {
+    fn not_found_reports_not_found_and_never_snapshots() {
         let source = FakeSource::new();
         let store = FakeStore::new();
         let parser = FakeParser::new();
         let run = RunMandates::new(&source, &store, &parser);
 
-        let err = run.execute(Path::new("/p/a/b"), &[]).unwrap_err();
+        let report = run.execute(Path::new("/p/a/b"), &[]).unwrap();
 
         assert_eq!(
-            err,
-            RunError::NoMandateFolder {
+            report.location,
+            RunLocation::NotFound {
                 searched_from: "/p/a/b".to_string()
             }
         );
+        assert!(report.mandates.is_empty());
+        assert!(report.is_valid());
+        assert_eq!(source.snapshot_call_count(), 0);
     }
 
     #[test]
     fn a_child_directorys_mandate_folder_is_ignored() {
         // "/p" has no .mandate itself; only its child "/p/sub" does. Walking
-        // up from "/p" must never look into children, so this still fails.
+        // up from "/p" must never look into children, so this still
+        // reports not found.
         let source = FakeSource::new().with_target("/p/sub");
         let store = FakeStore::new();
         let parser = FakeParser::new();
         let run = RunMandates::new(&source, &store, &parser);
 
-        let err = run.execute(Path::new("/p"), &[]).unwrap_err();
+        let report = run.execute(Path::new("/p"), &[]).unwrap();
 
         assert_eq!(
-            err,
-            RunError::NoMandateFolder {
+            report.location,
+            RunLocation::NotFound {
                 searched_from: "/p".to_string()
             }
         );
@@ -463,7 +500,13 @@ mod tests {
 
         let report = run.execute(Path::new("/p/a/b"), &[]).unwrap();
 
-        assert_eq!(report.root, "/p");
+        assert_eq!(
+            report.location,
+            RunLocation::Found {
+                root: "/p".to_string(),
+                snapshot_entries: 2
+            }
+        );
         assert_eq!(source.snapshot_call_count(), 1);
     }
 

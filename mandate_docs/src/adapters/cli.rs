@@ -47,20 +47,10 @@ pub fn render(report: &RunReportMandatesValidation, out: &mut dyn Write) {
     }
 }
 
-/// The process exit code for `report`: 0 if valid, 1 otherwise.
-pub fn exit_code(report: &RunReportMandatesValidation) -> i32 {
-    if report.is_valid() {
-        0
-    } else {
-        1
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::run_report::{MandateOutcome, MandateResult, RunWarning};
-    use crate::domain::validation::ValidationReport;
+    use crate::domain::run_report::{RunLocation, RunWarning};
 
     fn args(strs: &[&str]) -> Vec<String> {
         strs.iter().map(|s| s.to_string()).collect()
@@ -114,8 +104,10 @@ mod tests {
     #[test]
     fn render_writes_report_lines_joined_by_newline() {
         let report = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 1,
+            location: RunLocation::Found {
+                root: "/repo".to_string(),
+                snapshot_entries: 1,
+            },
             warnings: vec![RunWarning::NoMandatesFound {
                 mandates_dir: ".mandate/mandates".to_string(),
             }],
@@ -131,41 +123,5 @@ mod tests {
             .map(|line| line + "\n")
             .collect::<String>();
         assert_eq!(String::from_utf8(out).expect("utf8"), expected);
-    }
-
-    #[test]
-    fn exit_code_is_zero_when_report_is_valid() {
-        let report = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 1,
-            warnings: Vec::new(),
-            mandates: vec![MandateOutcome {
-                file_name: "a.yaml".to_string(),
-                result: MandateResult::Validated(ValidationReport {
-                    errors: Vec::new(),
-                    warnings: Vec::new(),
-                    rule_count: 1,
-                    doc_count: 1,
-                    code_count: 1,
-                }),
-            }],
-        };
-
-        assert_eq!(exit_code(&report), 0);
-    }
-
-    #[test]
-    fn exit_code_is_one_when_report_is_invalid() {
-        let report = RunReportMandatesValidation {
-            root: "/repo".to_string(),
-            snapshot_entries: 1,
-            warnings: Vec::new(),
-            mandates: vec![MandateOutcome {
-                file_name: "a.yaml".to_string(),
-                result: MandateResult::ParseFailed("bad".to_string()),
-            }],
-        };
-
-        assert_eq!(exit_code(&report), 1);
     }
 }
