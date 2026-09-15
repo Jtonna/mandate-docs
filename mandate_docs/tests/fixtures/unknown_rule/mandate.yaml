@@ -84,19 +84,19 @@ code:
       - docs/architecture/mandate-parser.md
       - docs/sop/handling-mandates.md
 
-  - path: src/domain/ports/file_tree.rs
+  - path: src/domain/ports/driven/file_tree_source.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: src/adapters/yaml.rs
+  - path: src/adapters/driven/yaml.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: src/adapters/memory_tree.rs
+  - path: src/adapters/driven/fs_mandate_store.rs
     docs:
       - docs/architecture/mandate-parser.md
 
-  - path: src/adapters/fs_tree.rs
+  - path: src/adapters/driven/fs_file_tree_source.rs
     docs:
       - docs/architecture/mandate-parser.md
 
@@ -105,12 +105,12 @@ code:
       - docs/architecture/mandate-parser.md
       - docs/sop/handling-mandates.md
 
-  - path: src/adapters/cli.rs
+  - path: src/adapters/driving/cli.rs
     docs:
       - docs/architecture/mandate-parser.md
       - docs/sop/handling-mandates.md
 
-  - path: tests/file_tree_contract.rs
+  - path: tests/fs_adapters.rs
     docs:
       - docs/architecture/mandate-parser.md
 

@@ -20,11 +20,11 @@ repository does not yet carry one (see section 3):
   "code": {
     "AGp11cEp": "src/domain/mandate.rs",
     "0HYahGqe": "src/domain/validation.rs",
-    "9O0dF9vv": "src/domain/ports/file_tree.rs",
-    "dmgg5Era": "src/adapters/yaml.rs",
-    "oYrdLikO": "src/adapters/memory_tree.rs",
-    "uhWvYLkM": "src/adapters/fs_tree.rs",
-    "j70aaooT": "src/adapters/cli.rs",
+    "9O0dF9vv": "src/domain/ports/driven/file_tree_source.rs",
+    "dmgg5Era": "src/adapters/driven/yaml.rs",
+    "oYrdLikO": "src/adapters/driven/fs_mandate_store.rs",
+    "uhWvYLkM": "src/adapters/driven/fs_file_tree_source.rs",
+    "j70aaooT": "src/adapters/driving/cli.rs",
     "1heIzw3j": "src/main.rs",
     "2rXErShe": "tests/file_tree_contract.rs",
     "JTBXrGc3": "tests/fixtures/doc_missing/mod.rs",
@@ -211,7 +211,28 @@ docs/
   sop/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
-  application/                the RunMandates use case
+  domain/                     business logic: models, ports, invariants
+    mandate.rs                Mandate, Rule, RuleKind, GovernedDoc, CodeLink
+    file_tree.rs              FileTreeSnapshot, EntryKind
+    validation.rs             validation logic, errors, warnings
+    run_report.rs             RunReportMandatesValidation, MandateOutcome
+    ports/
+      driven/
+        file_tree_source.rs   FileTreeSource port
+        mandate_store.rs      MandateStore port
+        mandate_parser.rs     MandateParser port
+      driving/                reserved for future driving ports
+  application/                use cases; imports domain only
+    run_mandates.rs           RunMandates use case
+  adapters/                   external integration
+    driving/
+      cli.rs                  command-line interface
+    driven/
+      fs_file_tree_source.rs  FileTreeSource implementation
+      fs_mandate_store.rs     MandateStore implementation
+      yaml.rs                 MandateParser implementation
+  main.rs                     composition root
+  lib.rs                      module declarations
 tests/                        integration tests
   fs_adapters.rs              FsFileTreeSource and FsMandateStore,
                               run against real temporary directories
@@ -707,7 +728,7 @@ technology:
 | `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
-The command line is a driving adapter in `src/adapters/cli.rs`, with its own
+The command line is a driving adapter in `src/adapters/driving/cli.rs`, with its own
 in-file unit tests. No test runs the built binary, because the binary will
 gain startup side effects.
 

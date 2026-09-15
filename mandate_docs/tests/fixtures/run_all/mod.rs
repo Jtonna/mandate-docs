@@ -25,7 +25,7 @@ fn two_mandates_run_and_one_is_invalid() {
         report.lines(),
         vec![
             "repository: /repo".to_string(),
-            "snapshot: 27 entries".to_string(),
+            "snapshot: 30 entries".to_string(),
             String::new(),
             "a.yaml".to_string(),
             "  valid: 3 rules, 2 documents, 11 source files".to_string(),

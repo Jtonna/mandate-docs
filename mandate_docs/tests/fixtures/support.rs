@@ -7,12 +7,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use mandate::adapters::yaml::{parse_mandate, YamlMandateParser};
+use mandate::adapters::driven::yaml::{parse_mandate, YamlMandateParser};
 use mandate::application::{RunError, RunMandates};
 use mandate::domain::file_tree::{EntryKind, FileTreeSnapshot};
 use mandate::domain::mandate::Mandate;
-use mandate::domain::ports::file_tree_source::{FileTreeSource, SourceError};
-use mandate::domain::ports::mandate_store::{MandateFile, MandateStore, StoreError};
+use mandate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
+use mandate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
 use mandate::domain::run_report::RunReportMandatesValidation;
 use mandate::domain::validation::validate;
 

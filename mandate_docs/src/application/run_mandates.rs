@@ -7,14 +7,176 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::domain::file_tree::FileTreeSnapshot;
-use crate::domain::ports::file_tree_source::FileTreeSource;
-use crate::domain::ports::mandate_parser::MandateParser;
-use crate::domain::ports::mandate_store::MandateStore;
+use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
+use crate::domain::ports::driven::mandate_parser::MandateParser;
+use crate::domain::ports::driven::mandate_store::{MandateStore, StoreError};
 use crate::domain::run_report::{
     MandateOutcome, MandateResult, RunLocation, RunReportMandatesValidation, RunWarning,
 };
 use crate::domain::validation::validate;
 
+/// Borrows its three ports for `'ports` and never owns them.
+pub struct RunMandates<'ports> {
+    source: &'ports dyn FileTreeSource,
+    store: &'ports dyn MandateStore,
+    parser: &'ports dyn MandateParser,
+}
+
+impl<'ports> RunMandates<'ports> {
+    pub fn new(
+        source: &'ports dyn FileTreeSource,
+        store: &'ports dyn MandateStore,
+        parser: &'ports dyn MandateParser,
+    ) -> Self {
+        Self {
+            source,
+            store,
+            parser,
+        }
+    }
+
+    /// Discovers the repository root by walking up from `start_dir` looking
+    /// for a top-level `.mandate` directory entry, then parses and
+    /// validates every mandate in `selected` (or every mandate the store
+    /// lists, if `selected` is empty) against one shared snapshot of that
+    /// root.
+    ///
+    /// Never finding a `.mandate` folder is not a failure: it means there
+    /// is nothing to check, the same as an empty mandates folder. The
+    /// report comes back `Ok` with a `NotFound` location, zero mandates
+    /// checked, and no store or snapshot calls made.
+    pub fn execute(
+        &self,
+        start_dir: &Path,
+        selected: &[String],
+    ) -> Result<RunReportMandatesValidation, RunError> {
+        let Some((root, snapshot)) = self.discover_root(start_dir)? else {
+            return Ok(RunReportMandatesValidation {
+                location: RunLocation::NotFound {
+                    searched_from: path_str(start_dir),
+                },
+                warnings: Vec::new(),
+                mandates: Vec::new(),
+            });
+        };
+        let root_str = path_str(&root);
+
+        let available = self.store.list(&root)?;
+        let names_to_run = self.select(&available, selected)?;
+
+        let mut warnings = Vec::new();
+        if available.is_empty() {
+            warnings.push(no_mandates_warning(&root_str));
+        }
+
+        let mut mandates = Vec::new();
+        for name in names_to_run {
+            mandates.push(self.check_one(&root, &snapshot, name)?);
+        }
+
+        Ok(RunReportMandatesValidation {
+            location: RunLocation::Found {
+                root: root_str,
+                snapshot_entries: snapshot.len(),
+            },
+            warnings,
+            mandates,
+        })
+    }
+
+    /// Picks which mandate names to run: every name in `available` when
+    /// `selected` is empty, otherwise just `selected`, after checking every
+    /// selected name actually appears in `available`.
+    fn select(&self, available: &[String], selected: &[String]) -> Result<Vec<String>, RunError> {
+        if selected.is_empty() {
+            return Ok(available.to_vec());
+        }
+
+        for name in selected {
+            if !available.contains(name) {
+                return Err(RunError::UnknownMandate {
+                    name: name.clone(),
+                    available: available.to_vec(),
+                });
+            }
+        }
+
+        Ok(available
+            .iter()
+            .filter(|name| selected.contains(name))
+            .cloned()
+            .collect())
+    }
+
+    /// Reads, parses, and validates one mandate by name against `snapshot`.
+    fn check_one(
+        &self,
+        root: &Path,
+        snapshot: &FileTreeSnapshot,
+        name: String,
+    ) -> Result<MandateOutcome, RunError> {
+        let file = self.store.read(root, &name)?;
+
+        let result = match self.parser.parse(&file.text) {
+            Err(message) => MandateResult::ParseFailed(message),
+            Ok(mandate) => MandateResult::Validated(validate(&mandate, snapshot)),
+        };
+
+        Ok(MandateOutcome {
+            file_name: name,
+            result,
+        })
+    }
+
+    /// Walks up from `start_dir` looking for a `.mandate` directory entry,
+    /// checking each ancestor with a cheap existence check before ever
+    /// calling `snapshot`. Snapshotting every ancestor while searching
+    /// would mean walking directories the current user does not own on the
+    /// way up ("Access is denied" on an unrelated system temp folder,
+    /// hit this way in a real run), so only the level that turns out to be
+    /// the root is ever snapshotted. A directory that cannot be read simply
+    /// answers `false`, so an unreadable ancestor never stops the search.
+    /// Returns `Ok(None)` if the filesystem root is reached with no
+    /// `.mandate` folder found.
+    fn discover_root(
+        &self,
+        start_dir: &Path,
+    ) -> Result<Option<(PathBuf, FileTreeSnapshot)>, RunError> {
+        let mut current = start_dir.to_path_buf();
+        loop {
+            let has_mandate = self.source.has_directory(&current, ".mandate")?;
+
+            if has_mandate {
+                let snapshot = self.source.snapshot(&current)?;
+                return Ok(Some((current, snapshot)));
+            }
+
+            match current.parent() {
+                Some(parent) => current = parent.to_path_buf(),
+                None => return Ok(None),
+            }
+        }
+    }
+}
+
+/// Renders `path` with forward slashes regardless of platform, so a report
+/// built on Windows reads the same as one built anywhere else.
+fn path_str(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// The warning for a discovered root whose mandates folder is empty.
+/// `root_str` already ends in "/" when the root is a drive root (e.g. "/"
+/// or "C:/"); trim it first so the joined path never double-slashes.
+fn no_mandates_warning(root_str: &str) -> RunWarning {
+    let root_trimmed = root_str.trim_end_matches('/');
+    RunWarning::NoMandatesFound {
+        mandates_dir: format!("{root_trimmed}/.mandate/mandates"),
+    }
+}
+
+// This sits below the type on purpose: read what the run does before what
+// can go wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunError {
     /// A name in `selected` is not among the mandate files the store lists
@@ -43,171 +205,16 @@ impl fmt::Display for RunError {
 
 impl std::error::Error for RunError {}
 
-/// Renders `path` with forward slashes regardless of platform, so a report
-/// built on Windows reads the same as one built anywhere else.
-fn path_str(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
-pub struct RunMandates<'a> {
-    source: &'a dyn FileTreeSource,
-    store: &'a dyn MandateStore,
-    parser: &'a dyn MandateParser,
-}
-
-impl<'a> RunMandates<'a> {
-    pub fn new(
-        source: &'a dyn FileTreeSource,
-        store: &'a dyn MandateStore,
-        parser: &'a dyn MandateParser,
-    ) -> Self {
-        Self {
-            source,
-            store,
-            parser,
-        }
-    }
-
-    /// Discovers the repository root by walking up from `start_dir` looking
-    /// for a top-level `.mandate` directory entry, then parses and
-    /// validates every mandate in `selected` (or every mandate the store
-    /// lists, if `selected` is empty) against one shared snapshot of that
-    /// root.
-    ///
-    /// Never finding a `.mandate` folder is not a failure: it means there
-    /// is nothing to check, the same as an empty mandates folder. The
-    /// report comes back `Ok` with a `NotFound` location, zero mandates
-    /// checked, and no store or snapshot calls made.
-    pub fn execute(
-        &self,
-        start_dir: &Path,
-        selected: &[String],
-    ) -> Result<RunReportMandatesValidation, RunError> {
-        let (root, snapshot) = match self.discover_root(start_dir)? {
-            DiscoverResult::Found { root, snapshot } => (root, snapshot),
-            DiscoverResult::NotFound { searched_from } => {
-                return Ok(RunReportMandatesValidation {
-                    location: RunLocation::NotFound { searched_from },
-                    warnings: Vec::new(),
-                    mandates: Vec::new(),
-                });
-            }
-        };
-        let root_str = path_str(&root);
-
-        let available = self
-            .store
-            .list(&root)
-            .map_err(|e| RunError::Store(e.to_string()))?;
-
-        if !selected.is_empty() {
-            for name in selected {
-                if !available.contains(name) {
-                    return Err(RunError::UnknownMandate {
-                        name: name.clone(),
-                        available: available.clone(),
-                    });
-                }
-            }
-        }
-
-        let mut warnings = Vec::new();
-        if available.is_empty() {
-            // `root_str` already ends in "/" when the root is a drive root
-            // (e.g. "/" or "C:/"); trim it first so the joined path never
-            // double-slashes.
-            let root_trimmed = root_str.trim_end_matches('/');
-            warnings.push(RunWarning::NoMandatesFound {
-                mandates_dir: format!("{root_trimmed}/.mandate/mandates"),
-            });
-        }
-
-        let names_to_run: Vec<String> = if selected.is_empty() {
-            available
-        } else {
-            available
-                .into_iter()
-                .filter(|name| selected.contains(name))
-                .collect()
-        };
-
-        let mut mandates = Vec::new();
-        for name in names_to_run {
-            let file = self
-                .store
-                .read(&root, &name)
-                .map_err(|e| RunError::Store(e.to_string()))?;
-
-            let result = match self.parser.parse(&file.text) {
-                Err(message) => MandateResult::ParseFailed(message),
-                Ok(mandate) => MandateResult::Validated(validate(&mandate, &snapshot)),
-            };
-
-            mandates.push(MandateOutcome {
-                file_name: name,
-                result,
-            });
-        }
-
-        Ok(RunReportMandatesValidation {
-            location: RunLocation::Found {
-                root: root_str,
-                snapshot_entries: snapshot.len(),
-            },
-            warnings,
-            mandates,
-        })
-    }
-
-    // Checks each ancestor for a `.mandate` directory entry with a cheap
-    // existence check (`has_directory`) before ever calling `snapshot`.
-    // `snapshot` walks the entire tree under the directory it is given, so
-    // snapshotting every ancestor while searching would mean walking
-    // directories the current user does not own on the way up (a real run
-    // hit "Access is denied" on an unrelated system temp folder this way).
-    // A directory that cannot be read simply answers `false` rather than
-    // erroring, so an unreadable ancestor never stops the search, and only
-    // the one level that turns out to be the root is ever snapshotted.
-    fn discover_root(&self, start_dir: &Path) -> Result<DiscoverResult, RunError> {
-        let mut current = start_dir.to_path_buf();
-        loop {
-            let has_mandate = self
-                .source
-                .has_directory(&current, ".mandate")
-                .map_err(|e| RunError::Source(e.to_string()))?;
-
-            if has_mandate {
-                let snapshot = self
-                    .source
-                    .snapshot(&current)
-                    .map_err(|e| RunError::Source(e.to_string()))?;
-                return Ok(DiscoverResult::Found {
-                    root: current,
-                    snapshot,
-                });
-            }
-
-            match current.parent() {
-                Some(parent) => current = parent.to_path_buf(),
-                None => {
-                    return Ok(DiscoverResult::NotFound {
-                        searched_from: path_str(start_dir),
-                    })
-                }
-            }
-        }
+impl From<SourceError> for RunError {
+    fn from(e: SourceError) -> Self {
+        RunError::Source(e.to_string())
     }
 }
 
-/// The outcome of walking up from a start directory looking for `.mandate`.
-enum DiscoverResult {
-    Found {
-        root: PathBuf,
-        snapshot: FileTreeSnapshot,
-    },
-    NotFound {
-        searched_from: String,
-    },
+impl From<StoreError> for RunError {
+    fn from(e: StoreError) -> Self {
+        RunError::Store(e.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -219,9 +226,9 @@ mod tests {
     use crate::application::run_mandates::{RunError, RunMandates};
     use crate::domain::file_tree::{EntryKind, FileTreeSnapshot};
     use crate::domain::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
-    use crate::domain::ports::file_tree_source::{FileTreeSource, SourceError};
-    use crate::domain::ports::mandate_parser::MandateParser;
-    use crate::domain::ports::mandate_store::{MandateFile, MandateStore, StoreError};
+    use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
+    use crate::domain::ports::driven::mandate_parser::MandateParser;
+    use crate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
     use crate::domain::run_report::{MandateResult, RunLocation, RunWarning};
 
     fn path_str(p: &Path) -> String {

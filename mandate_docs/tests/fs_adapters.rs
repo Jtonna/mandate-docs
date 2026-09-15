@@ -5,10 +5,10 @@
 use std::fs;
 use std::path::Path;
 
-use mandate::adapters::fs_file_tree_source::FsFileTreeSource;
-use mandate::adapters::fs_mandate_store::FsMandateStore;
-use mandate::domain::ports::file_tree_source::FileTreeSource;
-use mandate::domain::ports::mandate_store::MandateStore;
+use mandate::adapters::driven::fs_file_tree_source::FsFileTreeSource;
+use mandate::adapters::driven::fs_mandate_store::FsMandateStore;
+use mandate::domain::ports::driven::file_tree_source::FileTreeSource;
+use mandate::domain::ports::driven::mandate_store::MandateStore;
 
 fn write_file(path: &Path, contents: &str) {
     if let Some(parent) = path.parent() {

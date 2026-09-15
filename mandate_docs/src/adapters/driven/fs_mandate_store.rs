@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::domain::ports::mandate_store::{MandateFile, MandateStore, StoreError};
+use crate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
 
 pub struct FsMandateStore;
 

@@ -2,10 +2,10 @@
 
 use std::process::ExitCode;
 
-use mandate::adapters::cli::{parse_args, render};
-use mandate::adapters::fs_file_tree_source::FsFileTreeSource;
-use mandate::adapters::fs_mandate_store::FsMandateStore;
-use mandate::adapters::yaml::YamlMandateParser;
+use mandate::adapters::driven::fs_file_tree_source::FsFileTreeSource;
+use mandate::adapters::driven::fs_mandate_store::FsMandateStore;
+use mandate::adapters::driven::yaml::YamlMandateParser;
+use mandate::adapters::driving::cli::{parse_args, render};
 use mandate::application::run_mandates::RunMandates;
 
 fn main() -> ExitCode {

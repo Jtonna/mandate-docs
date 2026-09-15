@@ -167,10 +167,13 @@ One port per *capability*, not one giant `IInfrastructure` interface. `OrderRepo
 | Category | Convention | Examples |
 |---|---|---|
 | Persistence | `&lt;Aggregate&gt;Repository` | `OrderRepository`, `UserRepository` |
+| Project input (read-only, per run) | `&lt;Thing&gt;Source` / `&lt;Thing&gt;Store` | `FileTreeSource`, `MandateStore` |
 | External services | `&lt;Capability&gt;Gateway` / `&lt;Capability&gt;Provider` | `PaymentGateway`, `GeocodingProvider` |
 | Outbound messaging | `&lt;Event&gt;Publisher`, `&lt;Thing&gt;Notifier` | `OrderEventPublisher`, `EmailNotifier` |
 | Cross-cutting | `Clock`, `IdGenerator`, `Logger` | — |
 | Driving (inbound) | `&lt;UseCase&gt;` / `&lt;Action&gt;&lt;Noun&gt;` | `PlaceOrder`, `CancelSubscription` |
+
+A Source or Store reads the project being checked and keeps nothing between runs, so it is not a Repository.
 
 ### Common port categories
 
@@ -275,10 +278,10 @@ function buildApp(config: Config) {
 src/
 ├── domain/                  # inside the hexagon
 │   ├── model/               #   entities, value objects, domain errors
-│   ├── usecases/            #   application services / workflows
 │   └── ports/               #   ALL interfaces (owned by the core)
 │       ├── driven/          #     repositories, gateways, notifiers
 │       └── driving/         #     use-case interfaces (optional)
+├── application/             # use cases / workflows; imports domain only
 ├── adapters/                # outside the hexagon
 │   ├── driving/
 │   │   ├── http/            #   controllers, routes, request mappers
@@ -424,14 +427,14 @@ invoicing/
 │   ├── model/
 │   │   ├── invoice.ts             # Invoice aggregate: line items, status rules
 │   │   └── money.ts               # value object
-│   ├── usecases/
-│   │   ├── issue-invoice.ts       # validate → persist → charge → notify
-│   │   └── void-invoice.ts
 │   └── ports/
 │       ├── invoice-repository.ts
 │       ├── payment-gateway.ts
 │       ├── invoice-notifier.ts
 │       └── clock.ts
+├── application/
+│   ├── issue-invoice.ts           # validate → persist → charge → notify
+│   └── void-invoice.ts
 ├── adapters/
 │   ├── driving/
 │   │   ├── http/invoice-controller.ts
@@ -455,7 +458,7 @@ invoicing/
 **New rule: "invoices over $10,000 require a second approver."**
 
 1. `domain/model/invoice.ts` — add the invariant to `Invoice.issue()`.
-2. `domain/usecases/issue-invoice.ts` — handle the new `ApprovalRequired` outcome.
+2. `application/issue-invoice.ts` — handle the new `ApprovalRequired` outcome.
 3. `adapters/driving/http` — map `ApprovalRequired` to a `409` response.
 4. Ports, database adapter, Stripe adapter: **untouched.**
 
