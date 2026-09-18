@@ -167,10 +167,13 @@ One port per *capability*, not one giant `IInfrastructure` interface. `OrderRepo
 | Category | Convention | Examples |
 |---|---|---|
 | Persistence | `&lt;Aggregate&gt;Repository` | `OrderRepository`, `UserRepository` |
+| Project input (read-only, per run) | `&lt;Thing&gt;Source` / `&lt;Thing&gt;Store` | `FileTreeSource`, `MandateStore` |
 | External services | `&lt;Capability&gt;Gateway` / `&lt;Capability&gt;Provider` | `PaymentGateway`, `GeocodingProvider` |
 | Outbound messaging | `&lt;Event&gt;Publisher`, `&lt;Thing&gt;Notifier` | `OrderEventPublisher`, `EmailNotifier` |
 | Cross-cutting | `Clock`, `IdGenerator`, `Logger` | — |
 | Driving (inbound) | `&lt;UseCase&gt;` / `&lt;Action&gt;&lt;Noun&gt;` | `PlaceOrder`, `CancelSubscription` |
+
+A Source or Store reads the project being checked and keeps nothing between runs, so it is not a Repository.
 
 ### Common port categories
 

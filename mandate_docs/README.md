@@ -18,15 +18,15 @@ repository does not yet carry one (see section 3):
   },
 
   "code": {
-    "AGp11cEp": "src/domain/mandate.rs",
-    "0HYahGqe": "src/domain/validation.rs",
-    "9O0dF9vv": "src/domain/ports/file_tree.rs",
-    "dmgg5Era": "src/adapters/yaml.rs",
-    "oYrdLikO": "src/adapters/memory_tree.rs",
-    "uhWvYLkM": "src/adapters/fs_tree.rs",
-    "j70aaooT": "src/adapters/cli.rs",
+    "AGp11cEp": "src/domain/model/mandate.rs",
+    "0HYahGqe": "src/domain/model/validation.rs",
+    "9O0dF9vv": "src/domain/ports/driven/file_tree_source.rs",
+    "dmgg5Era": "src/adapters/driven/mandate_parser/yaml_mandate_parser.rs",
+    "oYrdLikO": "src/adapters/driven/mandate_store/fs_mandate_store.rs",
+    "uhWvYLkM": "src/adapters/driven/file_tree/fs_file_tree_source.rs",
+    "j70aaooT": "src/adapters/driving/cli/mod.rs",
     "1heIzw3j": "src/main.rs",
-    "2rXErShe": "tests/file_tree_contract.rs",
+    "2rXErShe": "tests/fs_adapters.rs",
     "JTBXrGc3": "tests/fixtures/doc_missing/mod.rs",
     "r7yc78R9": "tests/fixtures/support.rs"
   },
@@ -148,11 +148,11 @@ Resolved, one branch of the chain is:
 ```
 6aQ5ztd2  .mandate/mandates/Mandate_Parser.yaml
   NoZvYf6I  docs/architecture/mandate-parser.md
-      AGp11cEp  src/domain/mandate.rs
-      0HYahGqe  src/domain/validation.rs
+      AGp11cEp  src/domain/model/mandate.rs
+      0HYahGqe  src/domain/model/validation.rs
       1heIzw3j  src/main.rs
   vX2qsQpN  docs/sop/handling-mandates.md
-      0HYahGqe  src/domain/validation.rs
+      0HYahGqe  src/domain/model/validation.rs
       1heIzw3j  src/main.rs
 ```
 
@@ -206,19 +206,52 @@ Cargo.toml                    the Rust crate; unit tests in src/,
 docs/
   architecture/
     PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
-    mandate-parser.md         how the parser and validator are built
+    mandate-parser.md         how the parser, validator and run
+                              command are built
   sop/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
+  domain/                     business logic: models, ports, invariants
+    model/
+      mandate.rs              Mandate, Rule, RuleKind, GovernedDoc, CodeLink
+      file_tree.rs            FileTreeSnapshot, EntryKind
+      validation.rs           validation logic, errors, warnings
+      run_report.rs           RunReportMandatesValidation, MandateOutcome
+    usecases/
+      run_mandates.rs         RunMandates use case
+    ports/
+      driven/
+        file_tree_source.rs   FileTreeSource port
+        mandate_store.rs      MandateStore port
+        mandate_parser.rs     MandateParser port
+      driving/                reserved for future driving ports
+  adapters/                   external integration
+    driving/
+      cli/
+        mod.rs                command-line interface
+    driven/
+      file_system/
+        mod.rs                FileSystem trait (adapter-internal seam)
+        os_file_system.rs     OsFileSystem implementation
+      file_tree/
+        fs_file_tree_source.rs  FileTreeSource implementation
+      mandate_store/
+        fs_mandate_store.rs   MandateStore implementation
+      mandate_parser/
+        yaml_mandate_parser.rs  MandateParser implementation
+  main.rs                     composition root
+  lib.rs                      module declarations
 tests/                        integration tests
-  file_tree_contract.rs       the FileTree port contract, run against
-                              every adapter
+  fs_adapters.rs              FsFileTreeSource and FsMandateStore over
+                              OsFileSystem, run against real temporary
+                              directories
   fixtures/                   one test target: main.rs declares
                               support and every case
     support.rs                the fake virtual machine and assertion
                               helpers
     <case>/                   one fixture case: mod.rs and
-                              mandate.yaml
+                              mandate.yaml, including the run_*
+                              cases that exercise RunMandates
 ```
 
 Nothing under `docs/` is sample data, and no test reads it. There is no
@@ -248,7 +281,8 @@ A **mandate** is a file in `.mandate/mandates/`. It links documentation to the
 code it describes, and it carries the rules that keep that documentation honest.
 
 Read the example mandate shown in the intro, `Mandate_Parser.yaml`, alongside
-this section; the fixture cases under `tests/` carry copies of it.
+this section; the fixture cases under `tests/` use a separate mandate for a
+fictional todo app instead, described in section 10 step 3.
 
 A mandate is a middleman. It sits between documents and source files, and it
 adds the one thing a plain link cannot carry: how the documentation is
@@ -368,8 +402,8 @@ way, from a list of documents into a map keyed by document ID. Paths become IDs
 in both cases.
 
 ```
-mandate                          mandate.json
-  code: src/domain/validation.rs   docs_code:
+mandate                            mandate.json
+  code: src/domain/model/validation.rs   docs_code:
     docs: [mandate-parser.md]        NoZvYf6I: [0HYahGqe, ...]
 ```
 
@@ -452,11 +486,13 @@ are written down.
    wrong and needs correcting, by hand for now.
 4. **Two rebuild paths:** From `mandate.json` for speed, or from the mandate
    files for correctness. Both produce the same database.
-5. **Mandate validation:** one mandate file is parsed and checked against the
-   format and against the files it names, with every problem reported in one
-   pass. See `docs/architecture/mandate-parser.md`. This is the first piece
-   of real software; it will validate this repository's own mandate once
-   mandate is installed here.
+5. **Mandate validation and the run command:** the `mandate` command finds a
+   project's `.mandate` folder, parses and checks the mandates it selects
+   against the format and against one shared snapshot of the file tree,
+   and reports every problem found in one pass. See
+   `docs/architecture/mandate-parser.md`. This is the first piece of real
+   software; it will validate this repository's own mandates once mandate
+   is installed here.
 
 **Not in scope yet:**
 
@@ -512,7 +548,7 @@ delete it and sync again.
 The obvious design is to write paths directly into the mapping:
 
 ```json
-"src/domain/validation.rs": [
+"src/domain/model/validation.rs": [
   "docs/architecture/mandate-parser.md",
   "docs/sop/handling-mandates.md"
 ]
@@ -699,12 +735,14 @@ technology:
 
 | File in `tests/` | Intent |
 |---|---|
-| `<port>_contract.rs` | The shared contract suite for one port, run against every implementation. |
+| `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` over `OsFileSystem`, and `OsFileSystem` directly, against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
-The command line is a driving adapter in `src/adapters/cli.rs`, with its own
-in-file unit tests. No test runs the built binary, because the binary will
-gain startup side effects.
+The command line is a driving adapter in `src/adapters/driving/cli/mod.rs`. Its
+`run` method executes the use case and renders the report, with its own in-file
+unit tests. No test runs the built binary, because the binary will gain startup
+side effects; `main.rs` wires the adapters and maps the report's `is_valid()` to
+the exit code.
 
 Tests never read `docs/`, and this repository has no `.mandate/`. A test
 that needs a mandate or a file tree gets it from its own case directory
@@ -713,8 +751,11 @@ check it proves, holding `mod.rs` and `mandate.yaml`; the test builds a
 fake virtual machine from the mandate with the support module, edits
 files or the parsed mandate, and asserts the exact report, so a case can
 prove several things and each test's name says whether it passes or
-fails. A case is registered with one `mod` line in `tests/fixtures/main.rs`,
-the same way `src/` declares modules.
+fails. Every fixture `mandate.yaml` describes a fictional todo app that
+does not exist and needs no path in it to exist on disk, so a case is
+never confused for real documentation of this repository. A case is
+registered with one `mod` line in `tests/fixtures/main.rs`, the same way
+`src/` declares modules.
 
 Output: the diff and a green suite. The test command and its output are kept
 for step 7.
@@ -871,7 +912,7 @@ living in `mandate.json`:
 
 ```bash
 git diff -M --name-status <old-ref> <new-ref>
-# R096    src/domain/mandate.rs    src/core/mandate.rs
+# R096    src/domain/model/mandate.rs    src/core/mandate.rs
 ```
 
 Git recomputes renames heuristically at diff time by fingerprinting files in
@@ -925,6 +966,14 @@ that scan is remains undefined:
 
 Until this is settled, coverage percentages are only as meaningful as the
 denominator, and the denominator is whatever the scan decided to index.
+
+The run command's `FileTreeSnapshot`, described in
+`docs/architecture/mandate-parser.md`, is a first scan in this sense: it
+indexes nothing yet, since it feeds validation only, and it skips
+nothing, recording every file and directory under the root with no
+filtering at all. Whether a future scan that fills `mandate.json`'s
+indexes should skip the same nothing, or apply the exclusions this section
+still leaves open, remains undecided.
 
 ### The rule execution contract
 

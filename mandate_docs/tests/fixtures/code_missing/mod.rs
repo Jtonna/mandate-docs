@@ -7,7 +7,7 @@ fn fails_when_linked_source_files_are_missing() {
     let mandate = parse(MANDATE);
     let vm = FakeVirtualMachine::with_every_file_in(&mandate)
         .remove("src/main.rs")
-        .remove("tests/fixtures/doc_missing/mod.rs");
+        .remove("tests/adding_a_task.rs");
 
     let lines = check(&mandate, &vm);
 
@@ -15,7 +15,7 @@ fn fails_when_linked_source_files_are_missing() {
         lines,
         &[
             "missing source file: src/main.rs",
-            "missing source file: tests/fixtures/doc_missing/mod.rs",
+            "missing source file: tests/adding_a_task.rs",
         ],
     );
 }
