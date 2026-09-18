@@ -13,7 +13,9 @@ use crate::domain::model::run_report::{
 use crate::domain::model::validation::validate;
 use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
 use crate::domain::ports::driven::mandate_parser::MandateParser;
-use crate::domain::ports::driven::mandate_store::{MandateStore, StoreError};
+use crate::domain::ports::driven::mandate_store::{
+    MandateStore, StoreError, MANDATES_DIR, MANDATE_DIR,
+};
 
 /// Borrows its three ports for `'ports` and never owns them.
 pub struct RunMandates<'ports> {
@@ -118,7 +120,7 @@ impl<'ports> RunMandates<'ports> {
         let file = self.store.read(root, &name)?;
 
         let result = match self.parser.parse(&file.text) {
-            Err(message) => MandateResult::ParseFailed(message),
+            Err(err) => MandateResult::ParseFailed(err),
             Ok(mandate) => MandateResult::Validated(validate(&mandate, snapshot)),
         };
 
@@ -144,7 +146,7 @@ impl<'ports> RunMandates<'ports> {
     ) -> Result<Option<(PathBuf, FileTreeSnapshot)>, RunError> {
         let mut current = start_dir.to_path_buf();
         loop {
-            let has_mandate = self.source.has_directory(&current, ".mandate")?;
+            let has_mandate = self.source.has_directory(&current, MANDATE_DIR)?;
 
             if has_mandate {
                 let snapshot = self.source.snapshot(&current)?;
@@ -171,7 +173,7 @@ fn path_str(path: &Path) -> String {
 fn no_mandates_warning(root_str: &str) -> RunWarning {
     let root_trimmed = root_str.trim_end_matches('/');
     RunWarning::NoMandatesFound {
-        mandates_dir: format!("{root_trimmed}/.mandate/mandates"),
+        mandates_dir: format!("{root_trimmed}/{MANDATES_DIR}"),
     }
 }
 
@@ -227,7 +229,7 @@ mod tests {
     use crate::domain::model::mandate::{CodeLink, GovernedDoc, Mandate, Rule, RuleKind};
     use crate::domain::model::run_report::{MandateResult, RunLocation, RunWarning};
     use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
-    use crate::domain::ports::driven::mandate_parser::MandateParser;
+    use crate::domain::ports::driven::mandate_parser::{MandateParseError, MandateParser};
     use crate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
     use crate::domain::usecases::run_mandates::{RunError, RunMandates};
 
@@ -344,7 +346,7 @@ mod tests {
     }
 
     struct FakeParser {
-        mandates: HashMap<String, Result<Mandate, String>>,
+        mandates: HashMap<String, Result<Mandate, MandateParseError>>,
     }
 
     impl FakeParser {
@@ -360,18 +362,21 @@ mod tests {
         }
 
         fn err(mut self, text: &str, message: &str) -> Self {
-            self.mandates
-                .insert(text.to_string(), Err(message.to_string()));
+            self.mandates.insert(
+                text.to_string(),
+                Err(MandateParseError::Malformed(message.to_string())),
+            );
             self
         }
     }
 
     impl MandateParser for FakeParser {
-        fn parse(&self, text: &str) -> Result<Mandate, String> {
-            self.mandates
-                .get(text)
-                .cloned()
-                .unwrap_or_else(|| Err(format!("no fake mapping for text: {text}")))
+        fn parse(&self, text: &str) -> Result<Mandate, MandateParseError> {
+            self.mandates.get(text).cloned().unwrap_or_else(|| {
+                Err(MandateParseError::Malformed(format!(
+                    "no fake mapping for text: {text}"
+                )))
+            })
         }
     }
 
@@ -610,7 +615,9 @@ mod tests {
         assert_eq!(a.file_name, "a.yaml");
         assert_eq!(
             a.result,
-            MandateResult::ParseFailed("unknown field 'bogus'".to_string())
+            MandateResult::ParseFailed(MandateParseError::Malformed(
+                "unknown field 'bogus'".to_string()
+            ))
         );
 
         let b = &report.mandates[1];

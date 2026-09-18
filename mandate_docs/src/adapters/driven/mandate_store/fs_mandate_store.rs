@@ -4,13 +4,15 @@
 use std::fs;
 use std::path::Path;
 
-use crate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
+use crate::domain::ports::driven::mandate_store::{
+    MandateFile, MandateStore, StoreError, MANDATES_DIR,
+};
 
 pub struct FsMandateStore;
 
 impl MandateStore for FsMandateStore {
     fn list(&self, root: &Path) -> Result<Vec<String>, StoreError> {
-        let mandates_dir = root.join(".mandate/mandates");
+        let mandates_dir = root.join(MANDATES_DIR);
         if !mandates_dir.exists() {
             return Ok(Vec::new());
         }
@@ -44,7 +46,7 @@ impl MandateStore for FsMandateStore {
             )));
         }
 
-        let path = root.join(".mandate/mandates").join(file_name);
+        let path = root.join(MANDATES_DIR).join(file_name);
         let text = fs::read_to_string(&path)
             .map_err(|err| StoreError(format!("{}: {err}", path.display())))?;
 

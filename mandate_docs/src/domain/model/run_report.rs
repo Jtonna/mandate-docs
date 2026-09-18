@@ -1,11 +1,13 @@
 //! [`RunReportMandatesValidation`]: a domain value collecting the results of
 //! validating every mandate found in one run, and its rendering.
 
+use crate::domain::ports::driven::mandate_parser::MandateParseError;
+
 use super::validation::ValidationReport;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MandateResult {
-    ParseFailed(String),
+    ParseFailed(MandateParseError),
     Validated(ValidationReport),
 }
 
@@ -205,7 +207,9 @@ mod tests {
             warnings: Vec::new(),
             mandates: vec![MandateOutcome {
                 file_name: "bad.yaml".to_string(),
-                result: MandateResult::ParseFailed("unknown field 'bogus'".to_string()),
+                result: MandateResult::ParseFailed(MandateParseError::Malformed(
+                    "unknown field 'bogus'".to_string(),
+                )),
             }],
         };
 
@@ -216,7 +220,7 @@ mod tests {
                 "snapshot: 3 entries".to_string(),
                 String::new(),
                 "bad.yaml".to_string(),
-                "  failed to parse: unknown field 'bogus'".to_string(),
+                "  failed to parse: malformed mandate: unknown field 'bogus'".to_string(),
                 String::new(),
                 "1 mandates checked, 1 invalid".to_string(),
             ]
@@ -295,7 +299,7 @@ mod tests {
         let one_parse_failed = RunReportMandatesValidation {
             mandates: vec![MandateOutcome {
                 file_name: "a.yaml".to_string(),
-                result: MandateResult::ParseFailed("bad".to_string()),
+                result: MandateResult::ParseFailed(MandateParseError::Malformed("bad".to_string())),
             }],
             ..all_valid
         };

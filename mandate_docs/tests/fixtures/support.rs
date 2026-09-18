@@ -132,7 +132,16 @@ impl MandateStore for FakeVirtualMachine {
         Ok(names)
     }
 
+    /// Honours the same bare-name contract as the fs adapter: rejects any
+    /// `file_name` containing a path separator or `..`, rather than
+    /// resolving it.
     fn read(&self, _root: &Path, file_name: &str) -> Result<MandateFile, StoreError> {
+        if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
+            return Err(StoreError(format!(
+                "invalid mandate file name: {file_name}"
+            )));
+        }
+
         self.mandates
             .get(file_name)
             .map(|text| MandateFile {
@@ -216,6 +225,18 @@ mod tests {
                 docs: vec!["docs/a.md".to_string()],
             }],
         }
+    }
+
+    #[test]
+    fn read_rejects_a_name_with_a_separator() {
+        let vm = FakeVirtualMachine::empty();
+
+        let err = vm.read(Path::new("/repo"), "../a.yaml").unwrap_err();
+
+        assert_eq!(
+            err,
+            StoreError("invalid mandate file name: ../a.yaml".to_string())
+        );
     }
 
     #[test]

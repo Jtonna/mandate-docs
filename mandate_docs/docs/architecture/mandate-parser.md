@@ -27,7 +27,7 @@ domain/usecases use case that owns discovery, selection and reporting.
 | `src/domain/usecases/run_mandates.rs` | domain | `RunMandates`, the use case: discovers the project root, takes the snapshot, selects mandates, parses and validates each, and fills the report. `RunError` for its failure modes. |
 | `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
 | `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
-| `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`, plus `ParseError`. Turns mandate YAML text into a `Mandate`. |
+| `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
 | `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
 | `src/lib.rs` | composition root | Declares the `adapters`, `domain` and `domain::usecases` modules. |
@@ -50,6 +50,7 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTreeSource` and `MandateStore`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
+| `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Never reads docs/, never runs the binary. |
 
 Tests never read `docs/`, and no test runs the built binary. This repository
 has no `.mandate/` folder to read.
@@ -86,17 +87,25 @@ fn list(&self, root: &Path) -> Result<Vec<String>, StoreError>;
 fn read(&self, root: &Path, file_name: &str) -> Result<MandateFile, StoreError>;
 ```
 
-`list` returns the file names of the `.yaml` files directly in
-`<root>/.mandate/mandates/`, sorted; `read` returns one file's text.
-`FsMandateStore` is the sole adapter.
+The port also defines `MANDATE_DIR` (".mandate") and `MANDATES_DIR`
+(".mandate/mandates"), used by the adapter and the use case. `list` returns the
+file names of the `.yaml` files directly in `<root>/.mandate/mandates/`,
+sorted; `read` returns one file's text. `FsMandateStore` is the sole adapter.
 
 `MandateParser` has one method, turning mandate text into a `Mandate` or a
-parse error; `YamlMandateParser` in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` is the sole
-adapter, and is described in full in "What parsing rejects" below.
+`MandateParseError`; `YamlMandateParser` in
+`src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` is the sole adapter.
+`MandateParseError` is a domain type declared on the port, so the YAML crate's
+internal error never leaves the adapter. It is described in full in "What
+parsing rejects" below.
 
 `FakeVirtualMachine` in `tests/fixtures/support.rs` implements both
 `FileTreeSource` and `MandateStore` in one type, since a test scenario
 naturally sets up a repository's files and its mandate texts together.
+
+Each port's doc comment states its contract: `snapshot` path format and
+symlink policy, `has_directory` cheapness, `read` bare-file-name rule, and
+the error types on the parser and store ports.
 
 ## The run command
 
@@ -196,16 +205,16 @@ total mandates checked and how many were invalid.
 `parse_mandate` in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` turns mandate YAML text into a
 `Mandate`, or fails with one of two errors:
 
-- `ParseError::Malformed`, wrapping the underlying `yaml_serde::Error`. This
-  covers YAML that does not parse at all, a missing required field, and an
-  unknown field at any level, since every serde struct in `yaml.rs`
+- `MandateParseError::Malformed(message)`, wrapping the underlying
+  `yaml_serde::Error`. This covers YAML that does not parse at all, a missing
+  required field, and an unknown field at any level, since every serde struct
   (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`, `CodeLinkDoc`) carries
   `#[serde(deny_unknown_fields)]`.
-- `ParseError::InvalidRule { id, reason }`, produced after the YAML shape has
-  already parsed, when a rule's `type` and its fields disagree: `type:
-  script` without `run`, `type: script` with a `prompt` present, `type:
-  agent` without `prompt`, `type: agent` with a `run` present, or a `type`
-  that is neither `script` nor `agent`.
+- `MandateParseError::InvalidRule { id, reason }`, produced after the YAML
+  shape has already parsed, when a rule's `type` and its fields disagree:
+  `type: script` without `run`, `type: script` with a `prompt` present,
+  `type: agent` without `prompt`, `type: agent` with a `run` present, or a
+  `type` that is neither `script` nor `agent`.
 
 Parsing stops at the first shape problem, because that is how serde
 deserialization works: one YAML document either matches the target shape or
@@ -338,13 +347,15 @@ or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cl
 produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
 message when the command line does not match that shape.
 
-`cargo test` runs 77 tests: 46 unit tests under `src/` (6 in
-`adapters::driving::cli::tests`, 5 in `adapters::driven::mandate_parser::yaml_mandate_parser::tests`, 5 in
-`domain::model::file_tree::tests`, 5 in `domain::model::run_report::tests`, 13 in
-`domain::model::validation::tests`, 12 in `domain::usecases::run_mandates::tests`),
-10 in `tests/fs_adapters.rs`, and 21 in the `fixtures` target: 12 across
-the nine validation cases, 6 across the six run cases, and 3 for the
-support module.
+`cargo test` runs 83 tests: 48 unit tests under `src/` (6 in
+`adapters::driving::cli::tests`, 6 in
+`adapters::driven::mandate_parser::yaml_mandate_parser::tests`, 5 in
+`domain::model::file_tree::tests`, 5 in `domain::model::run_report::tests`, 13
+in `domain::model::validation::tests`, 12 in
+`domain::usecases::run_mandates::tests`, 1 in
+`domain::ports::driven::mandate_store::tests`), 10 in `tests/fs_adapters.rs`, 3
+in `tests/architecture.rs`, and 22 in the `fixtures` target: 12 across the nine
+validation cases, 6 across the six run cases, and 4 for the support module.
 
 ## Decisions
 
@@ -387,3 +398,9 @@ support module.
   `validate` itself: an author sees every problem in one pass.
 - Finding no `.mandate` folder is a warning with exit 0, the same as an
   empty mandates folder, since nothing to check is not a failure.
+- Port error types are domain types, declared on the port, so the YAML
+  library's internal error types never leave the adapter and are not part
+  of the public API.
+- The dependency rules (domain imports no adapter or vendor crate; adapters
+  import no use case; only main.rs constructs concrete adapters) are enforced
+  by a test rather than by convention, so violations are caught immediately.

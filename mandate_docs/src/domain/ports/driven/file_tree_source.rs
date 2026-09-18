@@ -16,6 +16,13 @@ impl fmt::Display for SourceError {
 }
 
 pub trait FileTreeSource {
+    /// Snapshots every entry under `root`. Entries are keyed by path
+    /// relative to `root`, using forward slashes on every platform and
+    /// never a leading `./`. Both directories and files are recorded, each
+    /// with its kind. A symlink is recorded as a file and is never
+    /// traversed, whatever it points to. Nothing under `root` is skipped.
+    /// Beyond what [`FileTreeSnapshot`] itself guarantees, there is no
+    /// ordering guarantee over the entries.
     fn snapshot(&self, root: &Path) -> Result<FileTreeSnapshot, SourceError>;
 
     /// Whether `dir` contains a directory entry named `name`, without
@@ -23,5 +30,9 @@ pub trait FileTreeSource {
     /// when `dir` itself cannot be read (missing, no permission, ...): an
     /// unreadable ancestor is not a reason to stop looking further up, only
     /// a reason it cannot be the root.
+    ///
+    /// Must be cheap relative to `snapshot`: one existence check, never a
+    /// walk. Callers probe every ancestor with this before ever calling
+    /// `snapshot` once.
     fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError>;
 }

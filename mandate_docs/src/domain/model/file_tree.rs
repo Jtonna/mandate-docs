@@ -12,6 +12,7 @@ pub enum EntryKind {
     Directory,
 }
 
+/// An exact repository-relative file tree at a point in time.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FileTreeSnapshot {
     entries: BTreeMap<String, EntryKind>,
@@ -52,6 +53,7 @@ impl FileTreeSnapshot {
         self.entries.insert(path.to_string(), EntryKind::File);
     }
 
+    /// Records `path` with `kind`, overwriting any prior entry at `path`.
     pub fn insert(&mut self, path: impl Into<String>, kind: EntryKind) {
         self.entries.insert(path.into(), kind);
     }
@@ -78,22 +80,27 @@ impl FileTreeSnapshot {
         self.entries.contains_key(path)
     }
 
+    /// Whether `path` is present and recorded as a file.
     pub fn is_file(&self, path: &str) -> bool {
         self.entries.get(path) == Some(&EntryKind::File)
     }
 
+    /// Whether `path` is present and recorded as a directory.
     pub fn is_dir(&self, path: &str) -> bool {
         self.entries.get(path) == Some(&EntryKind::Directory)
     }
 
+    /// The number of entries recorded, files and directories together.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether no entries are recorded at all.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Every recorded path, in the snapshot's own order.
     pub fn paths(&self) -> impl Iterator<Item = &str> {
         self.entries.keys().map(String::as_str)
     }
