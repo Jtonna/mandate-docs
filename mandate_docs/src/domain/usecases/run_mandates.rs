@@ -187,8 +187,8 @@ pub enum RunError {
         name: String,
         available: Vec<String>,
     },
-    Source(String),
-    Store(String),
+    Source(SourceError),
+    Store(StoreError),
 }
 
 impl fmt::Display for RunError {
@@ -199,8 +199,8 @@ impl fmt::Display for RunError {
                 "unknown mandate '{name}'; available mandates are: {}",
                 available.join(", ")
             ),
-            RunError::Source(message) => write!(f, "{message}"),
-            RunError::Store(message) => write!(f, "{message}"),
+            RunError::Source(inner) => write!(f, "{inner}"),
+            RunError::Store(inner) => write!(f, "{inner}"),
         }
     }
 }
@@ -209,13 +209,13 @@ impl std::error::Error for RunError {}
 
 impl From<SourceError> for RunError {
     fn from(e: SourceError) -> Self {
-        RunError::Source(e.to_string())
+        RunError::Source(e)
     }
 }
 
 impl From<StoreError> for RunError {
     fn from(e: StoreError) -> Self {
-        RunError::Store(e.to_string())
+        RunError::Store(e)
     }
 }
 

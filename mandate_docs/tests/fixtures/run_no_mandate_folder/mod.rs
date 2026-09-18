@@ -17,7 +17,7 @@ fn no_mandate_folder_anywhere_up_warns_and_reports_zero() {
         }
     );
     assert_eq!(
-        report.lines(),
+        mandate::adapters::driving::cli::report_lines(&report),
         vec![
             "warning: no .mandate folder found from /elsewhere up to the \
              filesystem root"

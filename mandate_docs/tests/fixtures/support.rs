@@ -13,6 +13,7 @@ use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::{
     parse_mandate, YamlMandateParser,
 };
 use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
+use mandate::adapters::driving::cli::validation_lines;
 use mandate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
 use mandate::domain::model::mandate::Mandate;
 use mandate::domain::model::run_report::RunReportMandatesValidation;
@@ -217,9 +218,9 @@ pub fn parse(yaml: &str) -> Mandate {
 }
 
 /// Validates `mandate` against `vm` and returns the report lines exactly as
-/// the CLI prints them, in validator order (see `ValidationReport::lines`).
+/// the CLI prints them, in validator order (see `cli::validation_lines`).
 pub fn check(mandate: &Mandate, vm: &FakeVirtualMachine) -> Vec<String> {
-    validate(mandate, &vm.snapshot()).lines()
+    validation_lines(&validate(mandate, &vm.snapshot()))
 }
 
 /// Asserts `lines` (as returned by [`check`]) reports no problems at all.

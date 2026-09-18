@@ -738,9 +738,11 @@ technology:
 | `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` over `OsFileSystem`, and `OsFileSystem` directly, against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
-The command line is a driving adapter in `src/adapters/driving/cli/mod.rs`, with its
-own in-file unit tests. No test runs the built binary, because the binary will
-gain startup side effects.
+The command line is a driving adapter in `src/adapters/driving/cli/mod.rs`. Its
+`run` method executes the use case and renders the report, with its own in-file
+unit tests. No test runs the built binary, because the binary will gain startup
+side effects; `main.rs` wires the adapters and maps the report's `is_valid()` to
+the exit code.
 
 Tests never read `docs/`, and this repository has no `.mandate/`. A test
 that needs a mandate or a file tree gets it from its own case directory

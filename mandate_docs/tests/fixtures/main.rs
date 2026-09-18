@@ -7,6 +7,7 @@ mod support;
 
 mod all_links_present;
 mod case_mismatch;
+mod cli_run;
 mod code_missing;
 mod doc_missing;
 mod duplicate_rule;

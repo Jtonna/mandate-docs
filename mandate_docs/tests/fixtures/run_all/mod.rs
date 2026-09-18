@@ -18,7 +18,7 @@ fn two_mandates_run_and_one_is_invalid() {
     assert_eq!(report.mandates.len(), 2);
     assert!(!report.is_valid());
     assert_eq!(
-        report.lines(),
+        mandate::adapters::driving::cli::report_lines(&report),
         vec![
             "repository: /repo".to_string(),
             "snapshot: 30 entries".to_string(),

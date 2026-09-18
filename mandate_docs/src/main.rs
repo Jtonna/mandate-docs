@@ -6,7 +6,7 @@ use mandate::adapters::driven::file_system::os_file_system::OsFileSystem;
 use mandate::adapters::driven::file_tree::fs_file_tree_source::FsFileTreeSource;
 use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::YamlMandateParser;
 use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
-use mandate::adapters::driving::cli::{parse_args, render};
+use mandate::adapters::driving::cli::{self, parse_args};
 use mandate::domain::usecases::run_mandates::RunMandates;
 
 fn main() -> ExitCode {
@@ -19,7 +19,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let start_dir = match invocation.root {
+    let start_dir = match invocation.root.clone() {
         Some(root) => root,
         None => match std::env::current_dir() {
             Ok(dir) => dir,
@@ -33,20 +33,21 @@ fn main() -> ExitCode {
     let source = FsFileTreeSource::new(OsFileSystem);
     let store = FsMandateStore::new(OsFileSystem);
     let parser = YamlMandateParser;
-    let run = RunMandates::new(&source, &store, &parser);
+    let run_mandates = RunMandates::new(&source, &store, &parser);
 
-    match run.execute(&start_dir, &invocation.mandates) {
-        Ok(report) => {
-            render(&report, &mut std::io::stdout());
-            if report.is_valid() {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
-        Err(err) => {
-            eprintln!("{err}");
-            ExitCode::FAILURE
-        }
+    let report = cli::run(
+        &invocation,
+        &start_dir,
+        &run_mandates,
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    );
+
+    // The exit code decision stays here, on purpose, rather than moving
+    // into cli::run: a planned long-running mode will need to keep running
+    // after an invalid report instead of exiting.
+    match report {
+        Some(r) if r.is_valid() => ExitCode::SUCCESS,
+        _ => ExitCode::FAILURE,
     }
 }

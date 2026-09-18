@@ -25,15 +25,17 @@ fn domain_isolation() {
 }
 
 #[test]
-/// Adapters must not import domain usecases.
+/// Driven adapters must not import domain usecases: they only fulfill a
+/// port contract. Driving adapters may, since a driving adapter's job is
+/// to invoke a use case (guide section 5).
 fn adapters_no_usecases() {
     let violations = check_files(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src/adapters"),
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src/adapters/driven"),
         |line| line.contains("domain::usecases"),
     );
     assert!(
         violations.is_empty(),
-        "adapters/ imports usecases:\n{}",
+        "adapters/driven/ imports usecases:\n{}",
         violations.join("\n")
     );
 }

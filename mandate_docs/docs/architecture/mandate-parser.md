@@ -19,8 +19,8 @@ domain/usecases use case that owns discovery, selection and reporting.
 |---|---|---|
 | `src/domain/model/mandate.rs` | domain | Plain data types for a mandate: `Mandate`, `Rule`, `RuleKind`, `GovernedDoc`, `CodeLink`. No serde, no I/O. |
 | `src/domain/model/file_tree.rs` | domain | `FileTreeSnapshot`, a value recording every file and directory under a root at one point in time. `EntryKind` distinguishes a file from a directory. |
-| `src/domain/model/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `&FileTreeSnapshot`. `ValidationReport::lines` renders the report one line per finding. |
-| `src/domain/model/run_report.rs` | domain | `RunReportMandatesValidation`, the report for one run: root, snapshot entry count, warnings, and one outcome per mandate. `is_valid()` and `lines()`. |
+| `src/domain/model/validation.rs` | domain | `validate`, `ValidationReport`, `ValidationError`, `ValidationWarning`. Checks a `Mandate` against a `&FileTreeSnapshot`. |
+| `src/domain/model/run_report.rs` | domain | `RunReportMandatesValidation`, the report for one run: root, snapshot entry count, warnings, and one outcome per mandate. `is_valid()`. |
 | `src/domain/ports/driven/file_tree_source.rs` | port | `FileTreeSource`, snapshots a root and cheaply checks whether one directory holds another. |
 | `src/domain/ports/driven/mandate_store.rs` | port | `MandateStore`, lists and reads mandate files under a root. |
 | `src/domain/ports/driven/mandate_parser.rs` | port | `MandateParser`, turns mandate text into a `Mandate`. |
@@ -30,7 +30,7 @@ domain/usecases use case that owns discovery, selection and reporting.
 | `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource<F>`, generic over `FileSystem`, a `FileTreeSource` that walks the filesystem. |
 | `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore<F>`, generic over `FileSystem`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
-| `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
+| `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `validation_lines`, `report_lines` and `render` produce and write the report text. `run` executes the use case and writes the report or error. Neither the adapter nor its tests do any I/O other than to the provided writers; `main.rs` wires the adapters and maps `report.is_valid()` to the exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
 | `src/lib.rs` | composition root | Declares the `adapters`, `domain` and `domain::usecases` modules. |
 
@@ -49,7 +49,7 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/model/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
 | `src/domain/usecases/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
 | `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories, and `OsFileSystem` directly. |
-| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
+| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing, rendering (`validation_lines`, `report_lines`, `render`), and `run` with in-memory writers and test doubles for the use case. No process is launched. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileSystem`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Fixtures build the real `FsFileTreeSource` and `FsMandateStore` over it. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 | `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Never reads docs/, never runs the binary. |
@@ -156,11 +156,15 @@ validated in turn. A parse failure is recorded in that mandate's slot as
 `MandateResult::ParseFailed`, and the run continues with the rest; it does
 not stop the run the way an unknown name does.
 
-**Exit codes.** `0` when every selected mandate parsed and validated clean.
-`1` if any mandate failed to parse or validated with errors. `1` also for
-`RunError::UnknownMandate`, reported before any mandate runs. `0` for an
-empty mandates folder or when no `.mandate` folder is found, since a
-warning is not a failure.
+**Reporting and exit codes.** `RunMandates` fills the report with everything
+it finds; it never calls `std::process::exit`. The CLI adapter's `run` method
+executes the use case, writes the report or error, and returns `Some(report)`
+or `None`. `main.rs` wires the adapters, calls `cli::run`, and maps the result
+to the exit code: `0` when the report is `Some` and `is_valid()` is `true`,
+`1` otherwise. This split means a planned long-running mode can keep running
+instead of exiting after an invalid report. Exit code `0` for an empty
+mandates folder or when no `.mandate` folder is found, since a warning is
+not a failure.
 
 ## The report
 
@@ -171,11 +175,11 @@ with variants `Found { root, snapshot_entries }` or
 `mandates` (a `Vec<MandateOutcome>`, one per selected mandate, each an
 `Enum` of `ParseFailed(String)` or `Validated(ValidationReport)`). `is_valid()`
 is `true` when no outcome is a parse failure and every `ValidationReport` is
-valid. `lines()` renders the whole report as one string per line, in the
-layout below.
+valid.
 
-Nothing prints during the run: `RunMandates` only fills the report, and the
-CLI's `render` writes it out once the run is finished.
+Nothing prints during the run: `RunMandates` only fills the report. The report
+is plain data; the CLI adapter's `render` writes it out once the run is finished,
+in the layout below.
 
 The naming convention is `RunReport<Phase>`, so a later phase (rule
 execution) gets its own `RunReport` type rather than growing this one.
@@ -241,14 +245,13 @@ built in one pass: every check in the function runs regardless of what
 earlier checks found. `report.is_valid()` is `true` exactly when `errors`
 is empty; `warnings` never affects it.
 
-`ValidationReport::lines` renders the report as one string per finding,
-errors first in validator order, then warnings, each prefixed `error: ` or
-`warning: ` and using the `Display` text in the table below.
-`RunReportMandatesValidation::lines`, described in "The report" below,
-indents these lines under each mandate's file name, and the fixture
-helper's `check` returns them unchanged, so the printed format and its
-order are defined in one place and every fixture case asserts exactly
-what a user would see.
+The CLI adapter's `validation_lines` method renders the report as one
+string per finding, errors first in validator order, then warnings, each
+prefixed `error: ` or `warning: ` and using the `Display` text in the
+table below. The `report_lines` method wraps these under each mandate's
+file name, and the fixture helper's `check` returns them unchanged, so the
+printed format and its order are defined in one place and every fixture
+case asserts exactly what a user would see.
 
 | Variant | Message printed | Meaning |
 |---|---|---|
@@ -291,19 +294,24 @@ The validation test parses the mandate with `parse`, builds a
 `FakeVirtualMachine` with every linked file present, constructs the real
 adapters over it, applies the case's edit in code (`remove`, `rename`, or a
 change to the parsed `Mandate` value), then calls `check`, which calls
-`validate` and returns `ValidationReport::lines` unchanged, so a case
-asserts the lines in validator order: errors first, following the mandate's
-own order of `rules`, `governs` and `code`, then warnings. Then the test
+`validate` and renders the report lines using the CLI adapter's
+`validation_lines` method, unchanged, so a case asserts the lines in validator
+order: errors first, following the mandate's own order of `rules`, `governs`
+and `code`, then warnings. Then the test
 asserts the result with `assert_passes`, `assert_passes_with_warnings` or
 `assert_fails`. Because the assertion is exact, an unexpected extra line
 fails the test. Pass or fail is in each test function's name, and a case can
 hold more than one test; three of the nine original cases do.
 
-The six `run_*` cases exercise `RunMandates` instead: they build a
+The six `run_*` cases exercise `RunMandates` directly: they build a
 `FakeVirtualMachine` with `with_mandate` to add named mandate texts, edit
 it with `add`, `remove` or `rename` for missing files, construct the real
-adapters over it, run it through `RunMandates`, and assert on
-`RunReportMandatesValidation::lines()` or on the `RunError` returned.
+adapters over it, run it through `RunMandates`, and assert on the report's
+lines or on the `RunError` returned. The two `cli_run` cases exercise the
+CLI adapter's `run` method: they build a fake virtual machine, construct
+the real adapters over it, call `cli::run`, and assert that the report was
+written to the provided writer and that the returned value matches the
+report's validity.
 
 Each `mandate.yaml` is an independent copy, edited only where the case
 needs it; there is nothing else it is kept in sync with.
@@ -325,6 +333,7 @@ needs it; there is nothing else it is kept in sync with.
 | `run_from_subdirectory` | `starts_below_root_and_finds_it_by_walking_up` builds a repo with a `.mandate` folder at `/repo` and starts discovery from `/repo/src`; asserts the report's root is `/repo` and the run is valid. | Discovery climbs from the starting directory to the nearest ancestor with `.mandate`. |
 | `run_no_mandates` | `no_mandate_files_warns_and_reports_zero` builds a repo with an empty `.mandate/mandates` folder; asserts `RunWarning::NoMandatesFound` naming the mandates directory, zero mandates in the report, and that the run is valid. | An empty mandates folder is a warning, not a failure. |
 | `run_no_mandate_folder` | `no_mandate_folder_anywhere_up_warns_and_reports_zero` starts discovery from a directory with no `.mandate` in any ancestor; asserts the warning message naming the starting directory, zero mandates in the report, and exit 0. | Finding no `.mandate` folder is a warning, not a failure. |
+| `cli_run` | `run_writes_the_report_to_out_and_returns_it` calls `cli::run`, asserts the report was written to the output writer, and that it was returned; `run_writes_an_unknown_mandate_error_to_err_and_returns_none` runs with an unknown mandate name, asserts the error was written to the error writer, and `None` was returned. | The CLI adapter's `run` method executes the use case and returns the report or `None`. |
 
 ## Running it
 
@@ -357,16 +366,17 @@ or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cl
 produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
 message when the command line does not match that shape.
 
-`cargo test` runs 88 tests: 48 unit tests under `src/` (6 in
-`adapters::driving::cli::tests`, 6 in
-`adapters::driven::mandate_parser::yaml_mandate_parser::tests`, 5 in
-`domain::model::file_tree::tests`, 5 in `domain::model::run_report::tests`, 13
-in `domain::model::validation::tests`, 12 in
+`cargo test` runs 90 tests: 48 unit tests under `src/` (11 in
+`adapters::driving::cli::tests` with 6 on argument parsing and 5 on
+rendering, 6 in `adapters::driven::mandate_parser::yaml_mandate_parser::tests`,
+5 in `domain::model::file_tree::tests`, 1 in `domain::model::run_report::tests`,
+12 in `domain::model::validation::tests`, 12 in
 `domain::usecases::run_mandates::tests`, 1 in
 `domain::ports::driven::mandate_store::tests`), 14 in `tests/fs_adapters.rs`
 (11 real adapters over `OsFileSystem`, 3 for `OsFileSystem` alone), 3 in
-`tests/architecture.rs`, and 23 in the `fixtures` target: 12 across the nine
-validation cases, 6 across the six run cases, and 5 for the support module.
+`tests/architecture.rs`, and 25 in the `fixtures` target: 12 across the nine
+validation cases, 6 across the six run cases, 2 across the cli_run cases, and
+5 for the support module.
 
 ## Decisions
 
@@ -418,3 +428,14 @@ validation cases, 6 across the six run cases, and 5 for the support module.
 - The dependency rules (domain imports no adapter or vendor crate; adapters
   import no use case; only main.rs constructs concrete adapters) are enforced
   by a test rather than by convention, so violations are caught immediately.
+- Presentation lives in the driving adapter: report rendering (`validation_lines`,
+  `report_lines`, `render`) belongs to the CLI adapter, not the domain, per the
+  guide; the domain carries only the data.
+- The CLI adapter runs the use case (`cli::run` calls `RunMandates`) and
+  returns the report or `None`; `main.rs` only wires the adapters and picks
+  the exit code by calling `report.is_valid()`. The split is deliberate: the
+  exit code stays in main.rs so a planned long-running mode can keep the
+  server running instead of exiting after an invalid report.
+- Use case errors carry the typed port errors: `RunError::Source(SourceError)`
+  and `RunError::Store(StoreError)` hold the port error types, so the caller
+  knows what went wrong without losing information to a string.

@@ -1,5 +1,6 @@
 //! [`RunReportMandatesValidation`]: a domain value collecting the results of
-//! validating every mandate found in one run, and its rendering.
+//! validating every mandate found in one run. Rendering it is the CLI
+//! adapter's job (see `cli::report_lines`).
 
 use crate::domain::ports::driven::mandate_parser::MandateParseError;
 
@@ -54,77 +55,6 @@ impl RunReportMandatesValidation {
             MandateResult::Validated(report) => report.is_valid(),
         })
     }
-
-    pub fn lines(&self) -> Vec<String> {
-        let mut lines = Vec::new();
-
-        match &self.location {
-            RunLocation::Found {
-                root,
-                snapshot_entries,
-            } => {
-                lines.push(format!("repository: {root}"));
-                lines.push(format!("snapshot: {snapshot_entries} entries"));
-                lines.push(String::new());
-            }
-            RunLocation::NotFound { searched_from } => {
-                lines.push(format!(
-                    "warning: no .mandate folder found from {searched_from} \
-                     up to the filesystem root"
-                ));
-                lines.push(String::new());
-            }
-        }
-
-        for warning in &self.warnings {
-            match warning {
-                RunWarning::NoMandatesFound { mandates_dir } => {
-                    lines.push(format!("warning: no mandates found in {mandates_dir}"));
-                }
-            }
-        }
-        if !self.warnings.is_empty() {
-            lines.push(String::new());
-        }
-
-        let mut invalid_count = 0;
-        for outcome in &self.mandates {
-            lines.push(outcome.file_name.clone());
-            match &outcome.result {
-                MandateResult::ParseFailed(message) => {
-                    invalid_count += 1;
-                    lines.push(format!("  failed to parse: {message}"));
-                }
-                MandateResult::Validated(report) => {
-                    for line in report.lines() {
-                        lines.push(format!("  {line}"));
-                    }
-                    if report.is_valid() {
-                        lines.push(format!(
-                            "  valid: {} rules, {} documents, {} source files",
-                            report.rule_count, report.doc_count, report.code_count
-                        ));
-                    } else {
-                        invalid_count += 1;
-                        lines.push(format!(
-                            "  invalid: {} errors, {} warnings",
-                            report.errors.len(),
-                            report.warnings.len()
-                        ));
-                    }
-                }
-            }
-            lines.push(String::new());
-        }
-
-        lines.push(format!(
-            "{} mandates checked, {} invalid",
-            self.mandates.len(),
-            invalid_count
-        ));
-
-        lines
-    }
 }
 
 #[cfg(test)]
@@ -161,118 +91,6 @@ mod tests {
             root: root.to_string(),
             snapshot_entries,
         }
-    }
-
-    #[test]
-    fn lines_renders_one_valid_and_one_invalid_mandate() {
-        let run = RunReportMandatesValidation {
-            location: found("/repo", 42),
-            warnings: Vec::new(),
-            mandates: vec![
-                MandateOutcome {
-                    file_name: "a.yaml".to_string(),
-                    result: MandateResult::Validated(valid_report()),
-                },
-                MandateOutcome {
-                    file_name: "b.yaml".to_string(),
-                    result: MandateResult::Validated(invalid_report()),
-                },
-            ],
-        };
-
-        assert_eq!(
-            run.lines(),
-            vec![
-                "repository: /repo".to_string(),
-                "snapshot: 42 entries".to_string(),
-                String::new(),
-                "a.yaml".to_string(),
-                "  valid: 1 rules, 1 documents, 1 source files".to_string(),
-                String::new(),
-                "b.yaml".to_string(),
-                "  error: governed document not found: docs/a.md".to_string(),
-                "  warning: rule 'x' is defined but no document references it".to_string(),
-                "  invalid: 1 errors, 1 warnings".to_string(),
-                String::new(),
-                "2 mandates checked, 1 invalid".to_string(),
-            ]
-        );
-        assert!(!run.is_valid());
-    }
-
-    #[test]
-    fn lines_renders_a_parse_failure() {
-        let run = RunReportMandatesValidation {
-            location: found("/repo", 3),
-            warnings: Vec::new(),
-            mandates: vec![MandateOutcome {
-                file_name: "bad.yaml".to_string(),
-                result: MandateResult::ParseFailed(MandateParseError::Malformed(
-                    "unknown field 'bogus'".to_string(),
-                )),
-            }],
-        };
-
-        assert_eq!(
-            run.lines(),
-            vec![
-                "repository: /repo".to_string(),
-                "snapshot: 3 entries".to_string(),
-                String::new(),
-                "bad.yaml".to_string(),
-                "  failed to parse: malformed mandate: unknown field 'bogus'".to_string(),
-                String::new(),
-                "1 mandates checked, 1 invalid".to_string(),
-            ]
-        );
-        assert!(!run.is_valid());
-    }
-
-    #[test]
-    fn lines_renders_the_no_mandates_warning_with_zero_mandates() {
-        let run = RunReportMandatesValidation {
-            location: found("/repo", 5),
-            warnings: vec![RunWarning::NoMandatesFound {
-                mandates_dir: ".mandate/mandates".to_string(),
-            }],
-            mandates: Vec::new(),
-        };
-
-        assert_eq!(
-            run.lines(),
-            vec![
-                "repository: /repo".to_string(),
-                "snapshot: 5 entries".to_string(),
-                String::new(),
-                "warning: no mandates found in .mandate/mandates".to_string(),
-                String::new(),
-                "0 mandates checked, 0 invalid".to_string(),
-            ]
-        );
-        assert!(run.is_valid());
-    }
-
-    #[test]
-    fn lines_renders_not_found_with_no_repository_or_snapshot_lines() {
-        let run = RunReportMandatesValidation {
-            location: RunLocation::NotFound {
-                searched_from: "/repo/src".to_string(),
-            },
-            warnings: Vec::new(),
-            mandates: Vec::new(),
-        };
-
-        assert_eq!(
-            run.lines(),
-            vec![
-                "warning: no .mandate folder found from /repo/src up to \
-                 the filesystem root"
-                    .to_string(),
-                String::new(),
-                "0 mandates checked, 0 invalid".to_string(),
-            ]
-        );
-        assert!(run.is_valid());
     }
 
     #[test]
