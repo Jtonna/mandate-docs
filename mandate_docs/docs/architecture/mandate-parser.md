@@ -25,8 +25,10 @@ domain/usecases use case that owns discovery, selection and reporting.
 | `src/domain/ports/driven/mandate_store.rs` | port | `MandateStore`, lists and reads mandate files under a root. |
 | `src/domain/ports/driven/mandate_parser.rs` | port | `MandateParser`, turns mandate text into a `Mandate`. |
 | `src/domain/usecases/run_mandates.rs` | domain | `RunMandates`, the use case: discovers the project root, takes the snapshot, selects mandates, parses and validates each, and fills the report. `RunError` for its failure modes. |
-| `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource`, a `FileTreeSource` that walks the real filesystem. |
-| `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
+| `src/adapters/driven/file_system/mod.rs` | adapter-internal seam | `FileSystem` trait with `list_dir`, `read_to_string`, `is_dir`, `exists`; `DirEntry`; `FileSystemError`. |
+| `src/adapters/driven/file_system/os_file_system.rs` | adapter-internal seam | `OsFileSystem`, the real disk implementation. |
+| `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource<F>`, generic over `FileSystem`, a `FileTreeSource` that walks the filesystem. |
+| `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore<F>`, generic over `FileSystem`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
 | `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `render` writes a report's lines to a writer. Neither does any I/O of its own. `main.rs` maps `report.is_valid()` to the process exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
@@ -46,9 +48,9 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | unit, in-file | The five parse-error cases, with inline YAML. |
 | `src/domain/model/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
 | `src/domain/usecases/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
-| `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories. |
+| `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories, and `OsFileSystem` directly. |
 | `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and `render`, using in-memory writers and a hand-built report. No process is launched. |
-| `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileTreeSource` and `MandateStore`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Has its own unit tests. |
+| `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileSystem`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Fixtures build the real `FsFileTreeSource` and `FsMandateStore` over it. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 | `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Never reads docs/, never runs the binary. |
 
@@ -75,10 +77,8 @@ fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError>;
 whether `dir` contains a directory entry named `name`, without building a
 snapshot, and answers `false` rather than erroring when `dir` itself
 cannot be read, so an unreadable ancestor is a reason it cannot be the
-root and never a reason to stop looking further up. `FsFileTreeSource` is
-the sole adapter, walking the real filesystem from `root`: every file and
-directory underneath, `.git` and `target/` included, symlinks recorded as
-files and never followed.
+root and never a reason to stop looking further up. `FsFileTreeSource<F>`
+is generic over `FileSystem` and is the sole adapter implementation.
 
 `MandateStore` has two methods:
 
@@ -90,7 +90,8 @@ fn read(&self, root: &Path, file_name: &str) -> Result<MandateFile, StoreError>;
 The port also defines `MANDATE_DIR` (".mandate") and `MANDATES_DIR`
 (".mandate/mandates"), used by the adapter and the use case. `list` returns the
 file names of the `.yaml` files directly in `<root>/.mandate/mandates/`,
-sorted; `read` returns one file's text. `FsMandateStore` is the sole adapter.
+sorted; `read` returns one file's text. `FsMandateStore<F>` is generic over
+`FileSystem` and is the sole adapter implementation.
 
 `MandateParser` has one method, turning mandate text into a `Mandate` or a
 `MandateParseError`; `YamlMandateParser` in
@@ -99,9 +100,20 @@ sorted; `read` returns one file's text. `FsMandateStore` is the sole adapter.
 internal error never leaves the adapter. It is described in full in "What
 parsing rejects" below.
 
-`FakeVirtualMachine` in `tests/fixtures/support.rs` implements both
-`FileTreeSource` and `MandateStore` in one type, since a test scenario
-naturally sets up a repository's files and its mandate texts together.
+## The file system seam
+
+`FileSystem` is not a port the domain calls; it is an adapter-internal seam
+that lets the driven adapters abstract away filesystem calls. This lets
+fixture tests run the real `FsFileTreeSource` and `FsMandateStore` adapters
+over a fake in-memory implementation (`FakeVirtualMachine`) without touching
+disk, proving the adapters' real logic against fixture data.
+
+`FakeVirtualMachine` in `tests/fixtures/support.rs` implements `FileSystem`,
+holding paths and mandate texts. A fixture builds the real adapters over the
+fake: `FsFileTreeSource::new(fake_fs)` and `FsMandateStore::new(fake_fs)`.
+Because the adapters see the same `FileSystem` interface in tests and in
+production, the real adapters are exercised on fake data, and their behaviour
+is covered without test doubles.
 
 Each port's doc comment states its contract: `snapshot` path format and
 symlink policy, `has_directory` cheapness, `read` bare-file-name rule, and
@@ -258,9 +270,9 @@ warning rather than an error.
 ## Fixture cases
 
 Every fixture mandate describes a fictional command-line todo app that does
-not exist; `FakeVirtualMachine::with_every_file_in` builds its fake file
-tree from the mandate's own `governs` and `code` links, so no path named in
-a fixture exists in this repository, or needs to.
+not exist. A fixture builds a `FakeVirtualMachine` from the mandate's own
+`governs` and `code` links, then constructs the real adapters over it, so no
+path named in a fixture exists in this repository, or needs to.
 
 `tests/fixtures/` holds one test target, `main.rs`, which declares a private
 `support` module and one `mod <case>;` line per case. Adding a case means
@@ -276,24 +288,22 @@ proves, holding two files:
   `use crate::support::*;` and `include_str!("mandate.yaml")`.
 
 The validation test parses the mandate with `parse`, builds a
-`FakeVirtualMachine` with every linked file present via
-`FakeVirtualMachine::with_every_file_in`, applies the case's edit in code
-(`remove`, `rename`, or a change to the parsed `Mandate` value), then calls
-`check`, which calls `validate` and returns `ValidationReport::lines`
-unchanged, so a case asserts the lines in validator order: errors first,
-following the mandate's own order of `rules`, `governs` and `code`, then
-warnings.
-Then the test asserts the result with `assert_passes`,
-`assert_passes_with_warnings` or `assert_fails`. Because the assertion is
-exact, an unexpected extra line fails the test. Pass or fail is in each
-test function's name, and a case can hold more than one test; three of
-the nine original cases do.
+`FakeVirtualMachine` with every linked file present, constructs the real
+adapters over it, applies the case's edit in code (`remove`, `rename`, or a
+change to the parsed `Mandate` value), then calls `check`, which calls
+`validate` and returns `ValidationReport::lines` unchanged, so a case
+asserts the lines in validator order: errors first, following the mandate's
+own order of `rules`, `governs` and `code`, then warnings. Then the test
+asserts the result with `assert_passes`, `assert_passes_with_warnings` or
+`assert_fails`. Because the assertion is exact, an unexpected extra line
+fails the test. Pass or fail is in each test function's name, and a case can
+hold more than one test; three of the nine original cases do.
 
-The five `run_*` cases exercise `RunMandates` instead: they build a
+The six `run_*` cases exercise `RunMandates` instead: they build a
 `FakeVirtualMachine` with `with_mandate` to add named mandate texts, edit
-it with `add`, `remove` or `rename` for missing files, run it through
-`RunMandates`, and assert on `RunReportMandatesValidation::lines()` or on
-the `RunError` returned.
+it with `add`, `remove` or `rename` for missing files, construct the real
+adapters over it, run it through `RunMandates`, and assert on
+`RunReportMandatesValidation::lines()` or on the `RunError` returned.
 
 Each `mandate.yaml` is an independent copy, edited only where the case
 needs it; there is nothing else it is kept in sync with.
@@ -347,18 +357,22 @@ or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cl
 produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
 message when the command line does not match that shape.
 
-`cargo test` runs 83 tests: 48 unit tests under `src/` (6 in
+`cargo test` runs 88 tests: 48 unit tests under `src/` (6 in
 `adapters::driving::cli::tests`, 6 in
 `adapters::driven::mandate_parser::yaml_mandate_parser::tests`, 5 in
 `domain::model::file_tree::tests`, 5 in `domain::model::run_report::tests`, 13
 in `domain::model::validation::tests`, 12 in
 `domain::usecases::run_mandates::tests`, 1 in
-`domain::ports::driven::mandate_store::tests`), 10 in `tests/fs_adapters.rs`, 3
-in `tests/architecture.rs`, and 22 in the `fixtures` target: 12 across the nine
-validation cases, 6 across the six run cases, and 4 for the support module.
+`domain::ports::driven::mandate_store::tests`), 14 in `tests/fs_adapters.rs`
+(11 real adapters over `OsFileSystem`, 3 for `OsFileSystem` alone), 3 in
+`tests/architecture.rs`, and 23 in the `fixtures` target: 12 across the nine
+validation cases, 6 across the six run cases, and 5 for the support module.
 
 ## Decisions
 
+- The filesystem adapters share an adapter-internal `FileSystem` seam so the
+  fixtures run the real adapters over an in-memory fake; a fake that
+  reimplements a port can drift from the real adapter, which happened once.
 - `yaml_serde` was chosen over `serde_yaml` because `serde_yaml` is archived
   and `yaml_serde` is the YAML organisation's maintained fork.
 - Validation collects every problem in one pass, rather than stopping at the

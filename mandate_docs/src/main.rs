@@ -2,6 +2,7 @@
 
 use std::process::ExitCode;
 
+use mandate::adapters::driven::file_system::os_file_system::OsFileSystem;
 use mandate::adapters::driven::file_tree::fs_file_tree_source::FsFileTreeSource;
 use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::YamlMandateParser;
 use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
@@ -29,8 +30,8 @@ fn main() -> ExitCode {
         },
     };
 
-    let source = FsFileTreeSource;
-    let store = FsMandateStore;
+    let source = FsFileTreeSource::new(OsFileSystem);
+    let store = FsMandateStore::new(OsFileSystem);
     let parser = YamlMandateParser;
     let run = RunMandates::new(&source, &store, &parser);
 

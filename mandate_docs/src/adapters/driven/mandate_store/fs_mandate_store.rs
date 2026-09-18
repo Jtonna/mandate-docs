@@ -1,40 +1,48 @@
-//! A [`MandateStore`] backed by the real filesystem, reading and listing
+//! A [`MandateStore`] backed by a [`FileSystem`], reading and listing
 //! `.yaml` files under `<root>/.mandate/mandates/`.
 
-use std::fs;
+use std::ffi::OsStr;
 use std::path::Path;
 
+use crate::adapters::driven::file_system::FileSystem;
+use crate::domain::model::file_tree::EntryKind;
 use crate::domain::ports::driven::mandate_store::{
     MandateFile, MandateStore, StoreError, MANDATES_DIR,
 };
 
-pub struct FsMandateStore;
+pub struct FsMandateStore<F: FileSystem> {
+    fs: F,
+}
 
-impl MandateStore for FsMandateStore {
+impl<F: FileSystem> FsMandateStore<F> {
+    pub fn new(fs: F) -> Self {
+        Self { fs }
+    }
+}
+
+impl<F> MandateStore for FsMandateStore<F>
+where
+    F: FileSystem,
+{
     fn list(&self, root: &Path) -> Result<Vec<String>, StoreError> {
         let mandates_dir = root.join(MANDATES_DIR);
-        if !mandates_dir.exists() {
+        if !self.fs.exists(&mandates_dir) {
             return Ok(Vec::new());
         }
 
-        let read_dir = fs::read_dir(&mandates_dir)
-            .map_err(|err| StoreError(format!("{}: {err}", mandates_dir.display())))?;
+        let entries = self
+            .fs
+            .list_dir(&mandates_dir)
+            .map_err(|err| StoreError(err.to_string()))?;
 
-        let mut names = Vec::new();
-        for entry in read_dir {
-            let entry =
-                entry.map_err(|err| StoreError(format!("{}: {err}", mandates_dir.display())))?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            if path.extension().and_then(|ext| ext.to_str()) != Some("yaml") {
-                continue;
-            }
-            if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
-                names.push(file_name.to_string());
-            }
-        }
+        let mut names: Vec<String> = entries
+            .into_iter()
+            .filter(|entry| {
+                entry.kind == EntryKind::File
+                    && Path::new(&entry.name).extension() == Some(OsStr::new("yaml"))
+            })
+            .map(|entry| entry.name)
+            .collect();
         names.sort();
         Ok(names)
     }
@@ -47,8 +55,10 @@ impl MandateStore for FsMandateStore {
         }
 
         let path = root.join(MANDATES_DIR).join(file_name);
-        let text = fs::read_to_string(&path)
-            .map_err(|err| StoreError(format!("{}: {err}", path.display())))?;
+        let text = self
+            .fs
+            .read_to_string(&path)
+            .map_err(|err| StoreError(err.to_string()))?;
 
         Ok(MandateFile {
             file_name: file_name.to_string(),

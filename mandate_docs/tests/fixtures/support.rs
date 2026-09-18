@@ -7,20 +7,23 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use mandate::adapters::driven::file_system::{DirEntry, FileSystem, FileSystemError};
+use mandate::adapters::driven::file_tree::fs_file_tree_source::FsFileTreeSource;
 use mandate::adapters::driven::mandate_parser::yaml_mandate_parser::{
     parse_mandate, YamlMandateParser,
 };
+use mandate::adapters::driven::mandate_store::fs_mandate_store::FsMandateStore;
 use mandate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
 use mandate::domain::model::mandate::Mandate;
 use mandate::domain::model::run_report::RunReportMandatesValidation;
 use mandate::domain::model::validation::validate;
-use mandate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
-use mandate::domain::ports::driven::mandate_store::{MandateFile, MandateStore, StoreError};
 use mandate::domain::usecases::run_mandates::{RunError, RunMandates};
 
 /// An in-memory repository-relative file tree. Also stands in as the
-/// mandate store: `with_mandate` records both the file's text (for
-/// `MandateStore`) and its presence in the tree (for `FileTreeSource`).
+/// mandate store: `with_mandate` records both the file's text and its
+/// presence in the tree. Implements [`FileSystem`], the seam the real
+/// [`FsFileTreeSource`] and [`FsMandateStore`] adapters are built on, so
+/// `run` below exercises the real adapters over fake data.
 pub struct FakeVirtualMachine {
     snapshot: FileTreeSnapshot,
     root: String,
@@ -72,17 +75,17 @@ impl FakeVirtualMachine {
         self
     }
 
-    /// The directory this virtual machine answers for as a
-    /// [`FileTreeSource`]. Default `"/repo"`.
+    /// The directory this virtual machine answers for as a filesystem.
+    /// Default `"/repo"`.
     pub fn at_root(mut self, root: &str) -> Self {
         self.root = root.to_string();
         self
     }
 
-    /// Registers a mandate file: `text` becomes readable through
-    /// [`MandateStore`] under `file_name`, and `.mandate`,
-    /// `.mandate/mandates`, and the file itself are added to the snapshot
-    /// as a directory, a directory, and a file respectively.
+    /// Registers a mandate file: `text` becomes readable under
+    /// `file_name`, and `.mandate`, `.mandate/mandates`, and the file
+    /// itself are added to the snapshot as a directory, a directory, and
+    /// a file respectively.
     pub fn with_mandate(mut self, file_name: &str, text: &str) -> Self {
         self.mandates
             .insert(file_name.to_string(), text.to_string());
@@ -109,51 +112,91 @@ impl FakeVirtualMachine {
     }
 }
 
-impl FileTreeSource for FakeVirtualMachine {
-    fn snapshot(&self, root: &Path) -> Result<FileTreeSnapshot, SourceError> {
-        let requested = root.to_string_lossy().replace('\\', "/");
+impl FakeVirtualMachine {
+    /// The path relative to this machine's root, forward-slash normalised,
+    /// with the root itself mapping to `""`. `None` if `path` is not the
+    /// root or under it.
+    fn relative_of(&self, path: &Path) -> Option<String> {
+        let requested = path.to_string_lossy().replace('\\', "/");
         if requested == self.root {
-            Ok(self.snapshot.clone())
+            Some(String::new())
         } else {
-            Ok(FileTreeSnapshot::empty())
+            requested
+                .strip_prefix(&format!("{}/", self.root))
+                .map(str::to_string)
         }
-    }
-
-    fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError> {
-        let requested = dir.to_string_lossy().replace('\\', "/");
-        Ok(requested == self.root && self.snapshot.is_dir(name))
     }
 }
 
-impl MandateStore for FakeVirtualMachine {
-    fn list(&self, _root: &Path) -> Result<Vec<String>, StoreError> {
-        let mut names: Vec<String> = self.mandates.keys().cloned().collect();
-        names.sort();
-        Ok(names)
-    }
-
-    /// Honours the same bare-name contract as the fs adapter: rejects any
-    /// `file_name` containing a path separator or `..`, rather than
-    /// resolving it.
-    fn read(&self, _root: &Path, file_name: &str) -> Result<MandateFile, StoreError> {
-        if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
-            return Err(StoreError(format!(
-                "invalid mandate file name: {file_name}"
+impl FileSystem for FakeVirtualMachine {
+    /// Errors unless `dir` is the root or a directory recorded in the
+    /// snapshot. Otherwise answers every entry whose path's parent is
+    /// exactly `dir`, i.e. its direct children only.
+    fn list_dir(&self, dir: &Path) -> Result<Vec<DirEntry>, FileSystemError> {
+        let relative_dir = self
+            .relative_of(dir)
+            .ok_or_else(|| FileSystemError(format!("{}: not under this root", dir.display())))?;
+        if !relative_dir.is_empty() && !self.snapshot.is_dir(&relative_dir) {
+            return Err(FileSystemError(format!(
+                "{}: no such directory",
+                dir.display()
             )));
         }
 
-        self.mandates
-            .get(file_name)
-            .map(|text| MandateFile {
-                file_name: file_name.to_string(),
-                text: text.clone(),
-            })
-            .ok_or_else(|| StoreError(format!("unknown mandate file '{file_name}'")))
+        let mut entries = Vec::new();
+        for path in self.snapshot.paths() {
+            let (parent, name) = match path.rsplit_once('/') {
+                Some((parent, name)) => (parent, name),
+                None => ("", path),
+            };
+            if parent == relative_dir {
+                let kind = if self.snapshot.is_dir(path) {
+                    EntryKind::Directory
+                } else {
+                    EntryKind::File
+                };
+                entries.push(DirEntry {
+                    name: name.to_string(),
+                    kind,
+                });
+            }
+        }
+        Ok(entries)
+    }
+
+    /// Serves mandate text recorded by `with_mandate`, keyed by the bare
+    /// file name under `.mandate/mandates/`.
+    fn read_to_string(&self, path: &Path) -> Result<String, FileSystemError> {
+        let unknown = || FileSystemError(format!("{}: unknown path", path.display()));
+        let relative = self.relative_of(path).ok_or_else(unknown)?;
+        let file_name = relative
+            .strip_prefix(".mandate/mandates/")
+            .ok_or_else(unknown)?;
+        self.mandates.get(file_name).cloned().ok_or_else(unknown)
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        match self.relative_of(path) {
+            Some(relative) if relative.is_empty() => true,
+            Some(relative) => self.snapshot.is_dir(&relative),
+            None => false,
+        }
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        match self.relative_of(path) {
+            Some(relative) if relative.is_empty() => true,
+            Some(relative) => self.snapshot.exists(&relative),
+            None => false,
+        }
     }
 }
 
 /// Runs [`RunMandates`] against `vm`, selecting `selected` (empty selects
-/// every mandate the store lists), starting discovery at `start_dir`.
+/// every mandate the store lists), starting discovery at `start_dir`. Goes
+/// through the real [`FsFileTreeSource`] and [`FsMandateStore`] adapters,
+/// each built over `vm` as the [`FileSystem`], so the real adapter code
+/// runs against fake data.
 pub fn run(
     vm: &FakeVirtualMachine,
     start_dir: &str,
@@ -161,7 +204,9 @@ pub fn run(
 ) -> Result<RunReportMandatesValidation, RunError> {
     let parser = YamlMandateParser;
     let selected: Vec<String> = selected.iter().map(|s| s.to_string()).collect();
-    RunMandates::new(vm, vm, &parser).execute(Path::new(start_dir), &selected)
+    let source = FsFileTreeSource::new(vm);
+    let store = FsMandateStore::new(vm);
+    RunMandates::new(&source, &store, &parser).execute(Path::new(start_dir), &selected)
 }
 
 /// Parses `yaml` into a [`Mandate`], panicking with the parse error if it is
@@ -228,15 +273,30 @@ mod tests {
     }
 
     #[test]
-    fn read_rejects_a_name_with_a_separator() {
-        let vm = FakeVirtualMachine::empty();
+    fn list_dir_of_the_root_answers_its_direct_children_only() {
+        let vm = FakeVirtualMachine::empty().with_mandate("a.yaml", "name: Test\n");
 
-        let err = vm.read(Path::new("/repo"), "../a.yaml").unwrap_err();
+        let mut entries = vm.list_dir(Path::new("/repo")).expect("list_dir");
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
 
         assert_eq!(
-            err,
-            StoreError("invalid mandate file name: ../a.yaml".to_string())
+            entries,
+            vec![DirEntry {
+                name: ".mandate".to_string(),
+                kind: EntryKind::Directory,
+            }]
         );
+    }
+
+    #[test]
+    fn read_to_string_of_an_unknown_path_errs() {
+        let vm = FakeVirtualMachine::empty();
+
+        let err = vm
+            .read_to_string(Path::new("/repo/.mandate/mandates/missing.yaml"))
+            .unwrap_err();
+
+        assert!(!err.0.is_empty());
     }
 
     #[test]

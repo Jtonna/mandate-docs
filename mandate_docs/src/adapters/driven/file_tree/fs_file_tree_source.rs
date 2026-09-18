@@ -1,52 +1,74 @@
-//! A [`FileTreeSource`] backed by the real filesystem, rooted at a
-//! directory. Walks recursively with `std::fs`; symlinks are not followed
-//! (a symlink is recorded as a file, never traversed as a directory).
+//! A [`FileTreeSource`] backed by a [`FileSystem`], walking recursively
+//! from a root directory. Symlinks are not followed (a symlink is
+//! recorded as a file, never traversed as a directory) because the
+//! underlying `FileSystem::list_dir` reports them as files.
 
-use std::fs;
 use std::path::Path;
 
+use crate::adapters::driven::file_system::FileSystem;
 use crate::domain::model::file_tree::{EntryKind, FileTreeSnapshot};
 use crate::domain::ports::driven::file_tree_source::{FileTreeSource, SourceError};
 
-pub struct FsFileTreeSource;
+pub struct FsFileTreeSource<F: FileSystem> {
+    fs: F,
+}
 
-impl FileTreeSource for FsFileTreeSource {
+impl<F: FileSystem> FsFileTreeSource<F> {
+    pub fn new(fs: F) -> Self {
+        Self { fs }
+    }
+}
+
+impl<F> FileTreeSource for FsFileTreeSource<F>
+where
+    F: FileSystem,
+{
     fn snapshot(&self, root: &Path) -> Result<FileTreeSnapshot, SourceError> {
         let mut snapshot = FileTreeSnapshot::empty();
-        walk(root, root, &mut snapshot)?;
+        self.walk(root, root, &mut snapshot)?;
         Ok(snapshot)
     }
 
     fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError> {
-        // `Path::is_dir` reports `false` on a missing path or a permission
-        // error rather than raising one, which is exactly the "never walk,
-        // just answer false" contract the port asks for.
-        Ok(dir.join(name).is_dir())
+        // `FileSystem::is_dir` reports `false` on a missing path or a
+        // permission error rather than raising one, which is exactly the
+        // "never walk, just answer false" contract the port asks for.
+        Ok(self.fs.is_dir(&dir.join(name)))
     }
 }
 
-fn walk(root: &Path, dir: &Path, snapshot: &mut FileTreeSnapshot) -> Result<(), SourceError> {
-    let read_dir =
-        fs::read_dir(dir).map_err(|err| SourceError(format!("{}: {err}", dir.display())))?;
+impl<F> FsFileTreeSource<F>
+where
+    F: FileSystem,
+{
+    fn walk(
+        &self,
+        root: &Path,
+        dir: &Path,
+        snapshot: &mut FileTreeSnapshot,
+    ) -> Result<(), SourceError> {
+        let entries = self
+            .fs
+            .list_dir(dir)
+            .map_err(|err| SourceError(err.to_string()))?;
 
-    for entry in read_dir {
-        let entry = entry.map_err(|err| SourceError(format!("{}: {err}", dir.display())))?;
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|err| SourceError(format!("{}: {err}", path.display())))?;
-        let relative_path = relative_forward_slash(root, &path);
+        for entry in entries {
+            let path = dir.join(&entry.name);
+            let relative_path = relative_forward_slash(root, &path);
 
-        if metadata.is_dir() {
-            snapshot.insert(relative_path, EntryKind::Directory);
-            walk(root, &path, snapshot)?;
-        } else {
-            // Files, and symlinks (symlink_metadata never reports a
-            // symlink itself as a directory), are recorded as files.
-            snapshot.insert(relative_path, EntryKind::File);
+            match entry.kind {
+                EntryKind::Directory => {
+                    snapshot.insert(relative_path, EntryKind::Directory);
+                    self.walk(root, &path, snapshot)?;
+                }
+                EntryKind::File => {
+                    snapshot.insert(relative_path, EntryKind::File);
+                }
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 fn relative_forward_slash(root: &Path, path: &Path) -> String {

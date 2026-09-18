@@ -47,6 +47,7 @@ fn adapter_construction_localized() {
         ("FsFileTreeSource", "fs_file_tree_source.rs"),
         ("FsMandateStore", "fs_mandate_store.rs"),
         ("YamlMandateParser", "yaml_mandate_parser.rs"),
+        ("OsFileSystem", "os_file_system.rs"),
     ];
     let mut rs_files = Vec::new();
     collect_rs_files(&src_dir, &mut rs_files);

@@ -230,6 +230,9 @@ src/                          domain, ports, adapters, composition root
       cli/
         mod.rs                command-line interface
     driven/
+      file_system/
+        mod.rs                FileSystem trait (adapter-internal seam)
+        os_file_system.rs     OsFileSystem implementation
       file_tree/
         fs_file_tree_source.rs  FileTreeSource implementation
       mandate_store/
@@ -239,8 +242,9 @@ src/                          domain, ports, adapters, composition root
   main.rs                     composition root
   lib.rs                      module declarations
 tests/                        integration tests
-  fs_adapters.rs              FsFileTreeSource and FsMandateStore,
-                              run against real temporary directories
+  fs_adapters.rs              FsFileTreeSource and FsMandateStore over
+                              OsFileSystem, run against real temporary
+                              directories
   fixtures/                   one test target: main.rs declares
                               support and every case
     support.rs                the fake virtual machine and assertion
@@ -731,7 +735,7 @@ technology:
 
 | File in `tests/` | Intent |
 |---|---|
-| `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` against real temporary directories: the driven adapters that touch disk. |
+| `fs_adapters.rs` | `FsFileTreeSource` and `FsMandateStore` over `OsFileSystem`, and `OsFileSystem` directly, against real temporary directories: the driven adapters that touch disk. |
 | `fixtures/<case>/mod.rs` | One fixture case inside the single `fixtures` target; the directory names the check and each test's name says whether it passes or fails. |
 
 The command line is a driving adapter in `src/adapters/driving/cli/mod.rs`, with its
