@@ -54,6 +54,10 @@ Jacob Tonna
    mandate <Name>.yaml
    ```
 
+   The name here is the mandate's file name in `.mandate/mandates/`, matched
+   exactly including upper and lower case; the `name:` field inside the file
+   is not used for this.
+
    A valid result shows the mandate's file name followed by a `valid: <n>
    rules, <n> documents, <n> source files` line, and the run exits `0`.
    Any `error:` or `warning:` line printed under the mandate's name means
@@ -89,7 +93,7 @@ and what to do about each one:
 |---|---|
 | `warning: no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. The run exits 0 with zero mandates checked. |
 | `warning: no mandates found in <dir>` | The `.mandate` folder was found but `.mandate/mandates/` has no `.yaml` files in it. Add a mandate, or leave it empty; the run still exits 0 with zero mandates checked. |
-| `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. |
+| `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. This stops the run before any mandate is checked, so nothing else is reported until the name is fixed. |
 | `no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
 | `duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |
 | `rule '<rule>' is referenced by <doc> but not defined` | Either add a `rules` entry with that `id`, or remove the reference from that document's `rules` list under `governs`. |
