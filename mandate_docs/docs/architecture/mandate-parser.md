@@ -22,7 +22,7 @@ adapter.
 ```mermaid
 flowchart LR
     subgraph driving["adapters/driving"]
-        CLI["cli::mod\n(parse_args, render, run)"]
+        CLI["cli\n(parse_args, render, run)"]
     end
 
     subgraph domain["domain"]
@@ -152,7 +152,7 @@ not a failure.
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
 | `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `validation_lines`, `report_lines` and `render` produce and write the report text. `run` executes the use case and writes the report or error. Neither the adapter nor its tests do any I/O other than to the provided writers; `main.rs` wires the adapters and maps `report.is_valid()` to the exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
-| `src/lib.rs` | composition root | Declares the `adapters`, `domain` and `domain::usecases` modules. |
+| `src/lib.rs` | composition root | Declares the `adapters` and `domain` modules. |
 
 Dependencies point one way: the adapters, the domain/usecases and the
 composition root import the rest of the domain; the domain imports nothing outside
@@ -229,8 +229,9 @@ the error types on the parser and store ports.
 value the run command produces. Fields: `location` (a `RunLocation` enum
 with variants `Found { root, snapshot_entries }` or
 `NotFound { searched_from }`), `warnings` (a `Vec<RunWarning>`), and
-`mandates` (a `Vec<MandateOutcome>`, one per selected mandate, each an
-`Enum` of `ParseFailed(String)` or `Validated(ValidationReport)`). `is_valid()`
+`mandates` (a `Vec<MandateOutcome>`, one per selected mandate, each pairing
+a file name with a `MandateResult` of `ParseFailed(MandateParseError)` or
+`Validated(ValidationReport)`). `is_valid()`
 is `true` when no outcome is a parse failure and every `ValidationReport` is
 valid.
 
@@ -278,9 +279,10 @@ total mandates checked and how many were invalid.
 `parse_mandate` in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` turns mandate YAML text into a
 `Mandate`, or fails with one of two errors:
 
-- `MandateParseError::Malformed(message)`, wrapping the underlying
-  `yaml_serde::Error`. This covers YAML that does not parse at all, a missing
-  required field, and an unknown field at any level, since every serde struct
+- `MandateParseError::Malformed(message)`, carrying the underlying
+  `yaml_serde::Error`'s message as a `String`. This covers YAML that does
+  not parse at all, a missing required field, and an unknown field at any
+  level, since every serde struct
   (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`, `CodeLinkDoc`) carries
   `#[serde(deny_unknown_fields)]`.
 - `MandateParseError::InvalidRule { id, reason }`, produced after the YAML
@@ -337,7 +339,7 @@ Tests follow the split in `README.md` section 10, step 3:
 | `src/domain/model/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
 | `src/domain/usecases/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
 | `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories, and `OsFileSystem` directly. |
-| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing, rendering (`validation_lines`, `report_lines`, `render`), and `run` with in-memory writers and test doubles for the use case. No process is launched. |
+| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and rendering (`validation_lines`, `report_lines`, `render`), with in-memory writers. No process is launched. `run` is exercised only by the `cli_run` fixture cases below. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileSystem`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Fixtures build the real `FsFileTreeSource` and `FsMandateStore` over it. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
 | `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Never reads docs/, never runs the binary. |
@@ -457,10 +459,11 @@ of an empty mandates folder and a missing `.mandate` folder (both warnings,
 not failures); `1` when any mandate failed to parse or validated with errors,
 or when a named mandate does not exist. `parse_args` in `src/adapters/driving/cli/mod.rs`
 produces the `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]`
-message when the command line does not match that shape.
+message when `--root` is given with no value, and `unknown option '<x>'`
+when the command line names an option other than `--root`.
 
 `cargo test` runs 90 tests: 48 unit tests under `src/` (11 in
-`adapters::driving::cli::tests` with 6 on argument parsing and 5 on
+`adapters::driving::cli::tests` with 5 on argument parsing and 6 on
 rendering, 6 in `adapters::driven::mandate_parser::yaml_mandate_parser::tests`,
 5 in `domain::model::file_tree::tests`, 1 in `domain::model::run_report::tests`,
 12 in `domain::model::validation::tests`, 12 in
