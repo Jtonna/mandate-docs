@@ -831,7 +831,7 @@ project recognises:
 | API reference | The surface a caller uses: commands, endpoints, formats, errors. | `docs/api/` |
 | Network documentation | Hosts, addresses, routes, firewall rules. | `docs/network/` |
 | Service interconnectivity | Which services talk to which, over what, under what contract. | `docs/services/` |
-| Standard operating procedure | A process a person follows, with an owner and ordered steps. | `docs/sop/` |
+| Standard operating procedure | A process a person follows, written as ordered steps. | `docs/sop/` |
 | Runbook | What to do when one specific thing goes wrong. | `docs/runbooks/` |
 | Onboarding | How a new person becomes productive. | `docs/sop/` |
 

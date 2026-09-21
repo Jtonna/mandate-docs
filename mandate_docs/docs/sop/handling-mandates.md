@@ -14,17 +14,13 @@ Covers writing a new mandate file in `.mandate/mandates/`, changing an
 existing one, and updating `.mandate/mandate.json` to match. It does not
 cover writing the documents a mandate governs, which follow the guidelines
 for their document type. It does not cover running a rule: nothing runs
-rules yet, per `README.md` section 5.
+rules yet.
 
 ### Before you start
 
 - Confirm mandate is installed in the project you are working in. This
   procedure applies there; this repository does not yet carry a
   `.mandate/` folder of its own.
-
-## Owner
-
-Jacob Tonna
 
 ## Steps
 
@@ -34,11 +30,10 @@ Jacob Tonna
    relative to the mandate file itself.
 
 2. Create `.mandate/mandates/<Name>.yaml` with the five fields `name`,
-   `description` (optional), `rules`, `governs` and `code`, following the
-   shape shown in `README.md` section 4. Every rule is either `type:
-   script` with a `run` command, or `type: agent` with a `prompt`. Every path
-   listed under a `code` entry's `docs` must name a document present in
-   `governs`.
+   `description` (optional), `rules`, `governs` and `code`. Every rule is
+   either `type: script` with a `run` command, or `type: agent` with a
+   `prompt`. Every path listed under a `code` entry's `docs` must name a
+   document present in `governs`.
 
 3. Validate the mandate. Run `mandate` from anywhere inside the project:
 
@@ -78,11 +73,12 @@ Jacob Tonna
    `code`). Add the mandate to `mandates`, each new document to `docs`, each
    new source file to `code`; add the rule ids that apply to each document
    under `mandates_docs`; add each document's linked source files under
-   `docs_code`. `README.md` section 1 shows the shape of all five keys.
+   `docs_code`.
 
 7. Include the mandate, the documents it governs, and the
    `.mandate/mandate.json` update in the same change as the code they
-   describe, per `README.md` section 10 step 7.
+   describe, so a change never leaves its documentation or its mandate
+   behind in a later commit.
 
 ### Message reference
 
@@ -107,5 +103,5 @@ and what to do about each one:
 This procedure covers what exists today: hand-written mandates and a
 hand-updated `mandate.json`. It will grow as mandate processing gains more
 features, such as a `mandate.json` generator, a repository scan, and rule
-execution. Each such feature updates this document in its own step 6, the
-documentation-and-mandates step of `README.md` section 10.
+execution. Each such feature updates this document as part of the same
+change that builds it.

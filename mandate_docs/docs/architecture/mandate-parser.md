@@ -2,18 +2,19 @@
 
 ## Purpose
 
-This is the first real software in the repository: a Rust crate that finds
-a project's `.mandate` folder, parses every selected mandate YAML file into
-a Rust value, validates each against the mandate format and against one
-shared snapshot of the file tree, and reports every problem it finds in one
-pass. It does not read or write `mandate.json` and does not execute a rule.
-Those remain out of scope, as recorded in `README.md` section 5.
+A Rust crate that finds a project's `.mandate` folder, parses every selected
+mandate YAML file into a Rust value, validates each against the mandate
+format and against one shared snapshot of the file tree, and reports every
+problem it finds in one pass. It does not read or write `mandate.json` and
+does not execute a rule; those are separate pieces that do not exist yet.
 
 ## Architecture at a glance
 
-The crate follows `docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md`, scaled to
-the size of the problem: three driven ports, three adapters, and one
-domain/usecases use case that owns discovery, selection and reporting.
+The crate follows the hexagonal ports and adapters pattern, scaled to the
+size of the problem: the domain in the middle owns the interfaces it needs,
+adapters on the outside implement them, and nothing inside depends on
+anything outside. Here that means three driven ports, three adapters, and
+one domain/usecases use case that owns discovery, selection and reporting.
 Dependencies point inward: `main.rs` (the composition root) wires concrete
 adapters into the domain, the CLI driving adapter calls the use case, and
 the use case calls the three driven ports; nothing in the domain imports an
@@ -57,6 +58,16 @@ flowchart LR
     FS -.implemented by.-> OS
 ```
 
+Reading the picture from the left: `main.rs` builds the CLI driving adapter
+and the three driven adapters (`FsFileTreeSource`, `FsMandateStore`,
+`YamlMandateParser`). The CLI adapter calls the `RunMandates` use case in
+the domain. `RunMandates` calls the three driven ports (`FileTreeSource`,
+`MandateStore`, `MandateParser`) and reads and writes the domain model
+types. Each port is implemented by exactly one of the driven adapters, and
+the two filesystem-facing adapters, `FsFileTreeSource` and
+`FsMandateStore`, both go through the `FileSystem` seam, which
+`OsFileSystem` implements for real disk access.
+
 The pieces below expand each layer in the diagram: the ports and their
 contracts, the file system seam, the model types the use case fills, and
 what parsing and validation each reject.
@@ -90,6 +101,19 @@ sequenceDiagram
     CLI-->>Main: Some(report) or None
     Main->>Main: exit code from report.is_valid()
 ```
+
+In order, one run does this: `main.rs` calls `parse_args` on the CLI
+adapter to turn the process arguments into an invocation, then calls
+`execute` on `RunMandates` with the starting directory and the selected
+mandate names. `RunMandates` checks each ancestor directory upward with
+`FileTreeSource::has_directory` until it finds one holding `.mandate`,
+takes one snapshot of that root with `FileTreeSource::snapshot`, and lists
+the available mandates with `MandateStore::list`. It selects which
+mandates to run, then for each one reads its text with `MandateStore::read`,
+parses it with `MandateParser::parse`, and validates the parsed mandate
+against the shared snapshot. The finished report goes back to the CLI
+adapter, which renders it to the output writer, and back to `main.rs`,
+which turns the report into an exit code.
 
 **Discovery.** With no `--root`, discovery starts at the current directory.
 `RunMandates::discover_root` checks each ancestor in turn with
@@ -164,9 +188,10 @@ else calls into the crate yet.
 The `serde`-derived structs (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`,
 `CodeLinkDoc`) live only in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` and never leave that
 module. `parse_mandate` maps each one into the plain domain types in
-`src/domain/model/mandate.rs` before returning. This follows the guide's rule that
-no library type may enter the domain: the domain types carry no `serde`
-attributes and would compile unchanged if the YAML library were replaced.
+`src/domain/model/mandate.rs` before returning. This follows the ports and
+adapters rule that no library type may enter the domain: the domain types
+carry no `serde` attributes and would compile unchanged if the YAML
+library were replaced.
 
 ### The ports
 
@@ -322,16 +347,19 @@ case asserts exactly what a user would see.
 | `ValidationError::CodeMissing { path }` | `missing source file: <path>` | A `code` path does not exist under the given `--root`. |
 | `ValidationWarning::UnreferencedRule { id }` | `rule '<id>' is defined but no document references it` | A rule in `rules` is referenced by no `governs` entry. |
 
-`CodeLinksUngovernedDoc` is the validator's check for format rule 2 in
-`README.md` section 4 ("a mandate may not link code to a document it does not
-govern"). `UnreferencedRule` is the check for format rule 3 ("a rule defined
-but referenced by no document is valid... worth a warning, and not an
-error"): the format treats it as expected, so `validate` reports it as a
-warning rather than an error.
+`CodeLinksUngovernedDoc` is the validator's check for the mandate format
+rule that a mandate may not link code to a document it does not govern.
+`UnreferencedRule` is the check for the format rule that a rule defined
+but referenced by no document is valid and worth a warning, not an error:
+the format treats it as expected, so `validate` reports it as a warning
+rather than an error.
 
 ## Testing
 
-Tests follow the split in `README.md` section 10, step 3:
+Tests split the same way Rust and Cargo split them: a unit test lives in
+the same file as the code it tests, under `#[cfg(test)]`, and may reach
+private items; an integration test lives under `tests/`, compiles as a
+separate crate, and can use only the public API.
 
 | File | Kind | What it covers |
 |---|---|---|
@@ -348,7 +376,15 @@ Tests never read `docs/`, and no test runs the built binary. This repository
 has no `.mandate/` folder to read.
 
 Fixture tests wire the real driven adapters over one fake, so validator and
-use case logic is exercised without a real disk:
+use case logic is exercised without a real disk. `FakeVirtualMachine` is
+the only fake in this picture: it implements the `FileSystem` seam in
+memory, holding paths and mandate texts instead of touching disk.
+`FsFileTreeSource`, `FsMandateStore`, `YamlMandateParser` and
+`RunMandates` are all the real, production adapters and use case, built
+over that fake instead of over `OsFileSystem`. Because the adapters cannot
+tell the difference between the fake and the real filesystem, exercising
+them against fixture data proves their real behaviour without any test
+double standing in for adapter logic itself:
 
 ```mermaid
 flowchart LR
@@ -489,7 +525,7 @@ validation cases, 6 across the six run cases, 2 across the cli_run cases, and
   nothing.
 - Paths are kept exactly as written in the mandate. Nothing normalises them.
 - A governed document that no `code` entry links to is not an error.
-  Partial coverage is the normal state (`README.md` section 4).
+  Partial coverage between documents and code is the normal, expected state.
 - Empty `governs` and empty `code` lists are not errors. Only an empty
   `rules` list is (`ValidationError::NoRules`).
 - The CLI is a driving adapter tested in-process, in `src/adapters/driving/cli/mod.rs`
@@ -525,8 +561,8 @@ validation cases, 6 across the six run cases, 2 across the cli_run cases, and
   import no use case; only main.rs constructs concrete adapters) are enforced
   by a test rather than by convention, so violations are caught immediately.
 - Presentation lives in the driving adapter: report rendering (`validation_lines`,
-  `report_lines`, `render`) belongs to the CLI adapter, not the domain, per the
-  guide; the domain carries only the data.
+  `report_lines`, `render`) belongs to the CLI adapter, not the domain, since
+  the domain carries only the data and nothing about how it is displayed.
 - The CLI adapter runs the use case (`cli::run` calls `RunMandates`) and
   returns the report or `None`; `main.rs` only wires the adapters and picks
   the exit code by calling `report.is_valid()`. The split is deliberate: the
