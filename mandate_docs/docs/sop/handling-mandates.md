@@ -82,11 +82,13 @@ Jacob Tonna
 
 ### Message reference
 
-Messages `mandate` can print for a mandate, and what to do about each one:
+Messages `mandate` can print, either about the run or about one mandate,
+and what to do about each one:
 
 | Message | What to do |
 |---|---|
 | `warning: no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. The run exits 0 with zero mandates checked. |
+| `warning: no mandates found in <dir>` | The `.mandate` folder was found but `.mandate/mandates/` has no `.yaml` files in it. Add a mandate, or leave it empty; the run still exits 0 with zero mandates checked. |
 | `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. |
 | `no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
 | `duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |
@@ -94,7 +96,7 @@ Messages `mandate` can print for a mandate, and what to do about each one:
 | `code <path> links <doc> which this mandate does not govern` | Add `<doc>` to `governs`, or remove it from that `code` entry's `docs` list. |
 | `governed document not found: <doc>` | Create the document at that path, or correct the path if it was mistyped. |
 | `missing source file: <path>` | Create the file, or correct the path if it was mistyped. |
-| `failed to parse: ...` | A shape problem: an unknown field, a missing required field, or a rule missing its `run` (for `type: script`) or its `prompt` (for `type: agent`). The message names the offending field or rule id; fix that field and re-run. |
+| `failed to parse: ...` | A shape problem: an unknown field, a missing required field, an unknown rule `type`, a rule missing the field its `type` requires (`run` for `type: script`, `prompt` for `type: agent`), or a rule declaring the field that belongs to the other type. The message names the offending field or rule id; fix it and re-run. |
 
 ## When this SOP changes
 
