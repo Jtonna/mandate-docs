@@ -13,7 +13,7 @@ repository does not yet carry one (see section 3):
   },
 
   "docs": {
-    "NoZvYf6I": "docs/architecture/mandate-parser.md",
+    "NoZvYf6I": "docs/architecture/mandate-parser-overview.md",
     "vX2qsQpN": "docs/sop/handling-mandates.md"
   },
 
@@ -147,7 +147,7 @@ Resolved, one branch of the chain is:
 
 ```
 6aQ5ztd2  .mandate/mandates/Mandate_Parser.yaml
-  NoZvYf6I  docs/architecture/mandate-parser.md
+  NoZvYf6I  docs/architecture/mandate-parser-overview.md
       AGp11cEp  src/domain/model/mandate.rs
       0HYahGqe  src/domain/model/validation.rs
       1heIzw3j  src/main.rs
@@ -206,8 +206,14 @@ Cargo.toml                    the Rust crate; unit tests in src/,
 docs/
   architecture/
     PORTS_AND_ADAPTERS_GUIDE.md   reference material, not indexed
-    mandate-parser.md         how the parser, validator and run
-                              command are built
+    mandate-parser-overview.md    the parser, validator and run
+                                  command: purpose and big picture
+    run-command.md             how a run flows, end to end
+    ports-and-adapters.md      the crate's ports, adapters and seam
+    testing.md                 how the test suite is wired
+    decisions/                 architecture decision records
+  reference/
+    mandate-format-checks.md  what parsing and validation reject
   sop/
     handling-mandates.md      how a mandate is written and validated
 src/                          domain, ports, adapters, composition root
@@ -404,7 +410,7 @@ in both cases.
 ```
 mandate                            mandate.json
   code: src/domain/model/validation.rs   docs_code:
-    docs: [mandate-parser.md]        NoZvYf6I: [0HYahGqe, ...]
+    docs: [mandate-parser-overview.md]  NoZvYf6I: [0HYahGqe, ...]
 ```
 
 ### Four rules the format defines
@@ -490,9 +496,9 @@ are written down.
    project's `.mandate` folder, parses and checks the mandates it selects
    against the format and against one shared snapshot of the file tree,
    and reports every problem found in one pass. See
-   `docs/architecture/mandate-parser.md`. This is the first piece of real
-   software; it will validate this repository's own mandates once mandate
-   is installed here.
+   `docs/architecture/mandate-parser-overview.md`. This is the first piece
+   of real software; it will validate this repository's own mandates once
+   mandate is installed here.
 
 **Not in scope yet:**
 
@@ -549,7 +555,7 @@ The obvious design is to write paths directly into the mapping:
 
 ```json
 "src/domain/model/validation.rs": [
-  "docs/architecture/mandate-parser.md",
+  "docs/architecture/mandate-parser-overview.md",
   "docs/sop/handling-mandates.md"
 ]
 ```
@@ -968,7 +974,7 @@ Until this is settled, coverage percentages are only as meaningful as the
 denominator, and the denominator is whatever the scan decided to index.
 
 The run command's `FileTreeSnapshot`, described in
-`docs/architecture/mandate-parser.md`, is a first scan in this sense: it
+`docs/architecture/mandate-parser-overview.md`, is a first scan in this sense: it
 indexes nothing yet, since it feeds validation only, and it skips
 nothing, recording every file and directory under the root with no
 filtering at all. Whether a future scan that fills `mandate.json`'s
