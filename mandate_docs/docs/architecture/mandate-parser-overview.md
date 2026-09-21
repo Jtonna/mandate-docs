@@ -62,9 +62,10 @@ flowchart LR
     FS -.implemented by.-> OS
 ```
 
-Reading the picture from the left: `main.rs` builds the CLI driving adapter
-and the three driven adapters (`FsFileTreeSource`, `FsMandateStore`,
-`YamlMandateParser`). The CLI adapter calls the `RunMandates` use case in
+Reading the picture from the left: `main.rs` builds the three driven
+adapters (`FsFileTreeSource`, `FsMandateStore`, `YamlMandateParser`) and
+calls into the CLI driving adapter, a set of free functions with no state
+of its own to build. The CLI adapter calls the `RunMandates` use case in
 the domain. `RunMandates` calls the three driven ports (`FileTreeSource`,
 `MandateStore`, `MandateParser`) and reads and writes the domain model
 types. Each port is implemented by exactly one of the driven adapters, and

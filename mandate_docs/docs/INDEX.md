@@ -22,8 +22,11 @@ Every document under `docs/`, grouped by folder.
 | `architecture/decisions/0008-discovery-avoids-full-snapshots.md` | ADR | Discovery checks ancestors with a cheap check and snapshots only the found root. |
 | `architecture/decisions/0009-missing-mandates-are-warnings.md` | ADR | A missing `.mandate` folder or empty mandates folder is a warning, not a failure. |
 | `architecture/decisions/0010-cli-tested-in-process.md` | ADR | Testing the CLI adapter in-process rather than through the built binary. |
-| `architecture/decisions/0011-presentation-in-driving-adapter.md` | ADR | Presentation and the exit-code split both live in the driving adapter and `main.rs`. |
-| `architecture/decisions/0012-port-error-types-are-domain-types.md` | ADR | Port error types are domain types, and the dependency rules are enforced by a test. |
+| `architecture/decisions/0011-presentation-in-driving-adapter.md` | ADR | Presentation lives in the driving adapter, not the domain. |
+| `architecture/decisions/0012-port-error-types-are-domain-types.md` | ADR | Port error types are domain types. |
+| `architecture/decisions/0013-exit-code-decided-in-main.md` | ADR | The exit code is decided in `main.rs`, not in `cli::run`. |
+| `architecture/decisions/0014-dependency-rules-enforced-by-a-test.md` | ADR | Dependency rules are enforced by a test, not by convention. |
+| `architecture/decisions/0015-run-report-named-per-phase.md` | ADR | Run report types are named `RunReport<Phase>`, one per run-command phase. |
 
 ## reference/
 
