@@ -26,16 +26,17 @@ The current stage of work, and a testing ground for the real system. A mandate
 links documentation to the code it describes and carries the rules that keep it
 honest.
 
-The folder holds the first real software, a Rust crate that parses a mandate
-and validates it, and the documentation for it under `docs/`. There is no
-`.mandate/` folder here, because that folder belongs to a project that has
-mandate installed, and this repository does not yet run mandate on itself.
-Test data lives beside each test under `mandate_docs/tests/fixtures/`.
-Nothing runs a rule yet.
+The folder holds the first real software, a Rust crate that finds a
+project's `.mandate` folder and validates every mandate in it against one
+snapshot of the tree, and the documentation for it under `docs/`. There is
+no `.mandate/` folder here, because that folder belongs to a project that
+has mandate installed, and this repository does not yet run mandate on
+itself. Test data lives beside each test under
+`mandate_docs/tests/fixtures/`. Nothing runs a rule yet.
 
-[`mandate_docs/README.md`](mandate_docs/README.md) is the specification: the file
-format, the reasoning behind each decision, and an explicit list of what has been
-deferred. Start there.
+[`mandate_docs/README.md`](mandate_docs/README.md) is the specification:
+the file format, the reasoning behind each decision, and an explicit list
+of what has been deferred. Start there.
 
 The eventual goal is to point the system at this repository and let it maintain
 its own documentation, improving the tool by using it on itself. The first step
