@@ -3,7 +3,7 @@
 This is the architecture overview of one flow through the mandate parser
 crate, for a reader who wants to know what happens end to end when the
 `mandate` command runs. See
-[`mandate-parser-overview.md`](mandate-parser-overview.md) for the crate's
+[`mandate-parser.md`](mandate-parser.md) for the crate's
 overall shape.
 
 ## How a run flows
@@ -54,8 +54,9 @@ which turns the report into an exit code.
 `FileTreeSource::has_directory(dir, ".mandate")`, a cheap existence check
 that answers `false`, rather than erroring, when a directory cannot be
 read; if the check comes back false, it moves to the parent and repeats.
-Reaching the filesystem root without finding one is not an error; the
-report prints a warning instead and exits 0. It never looks inside child
+Reaching the filesystem root without finding one is not an error, since
+nothing has gone wrong, there is simply nothing to check yet; the report
+prints a warning instead and exits 0. It never looks inside child
 directories, so a nested project with its own `.mandate` is ignored. Only
 the ancestor that turns out to hold `.mandate` is ever snapshotted; every
 ancestor tried above it gets only the existence check, never a full walk of
@@ -65,8 +66,11 @@ does not own, and a real run failed with "Access is denied" on an unrelated
 system temp folder before it could even report `.mandate` was never found.
 
 **Snapshot.** `RunMandates` shares the one snapshot taken at the
-discovered root across every mandate validated in the run. `validate`
-never takes its own snapshot.
+discovered root across every mandate validated in the run, so every
+mandate sees the exact same view of the file tree rather than one that
+could change between mandates. `validate` never takes its own snapshot;
+it takes a plain `&FileTreeSnapshot` value, so it carries no dependency on
+I/O or on the ports.
 
 **Selection.** `MandateStore::list` returns the `.yaml` file names directly
 in `.mandate/mandates/`. Selection is by full file name, case-sensitive; the
@@ -79,7 +83,8 @@ error. A name on the command line that matches no file is
 **Per-mandate outcome.** Every selected mandate is read, parsed and
 validated in turn. A parse failure is recorded in that mandate's slot as
 `MandateResult::ParseFailed`, and the run continues with the rest; it does
-not stop the run the way an unknown name does.
+not stop the run the way an unknown name does, so one invalid mandate does
+not prevent the rest of the run from being reported.
 
 **Reporting and exit codes.** `RunMandates` fills the report with everything
 it finds; it never calls `std::process::exit`. The CLI adapter's `run` method

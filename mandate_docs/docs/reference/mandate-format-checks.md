@@ -2,7 +2,7 @@
 
 This is a reference for the mandate parser and validator, for a reader who
 needs to look up what a specific parse or validation error means. See
-[`../architecture/mandate-parser-overview.md`](../architecture/mandate-parser-overview.md)
+[`../architecture/mandate-parser.md`](../architecture/mandate-parser.md)
 for how parsing and validation fit into the crate as a whole.
 
 ## What parsing rejects
@@ -11,11 +11,14 @@ for how parsing and validation fit into the crate as a whole.
 `Mandate`, or fails with one of two errors:
 
 - `MandateParseError::Malformed(message)`, carrying the underlying
-  `yaml_serde::Error`'s message as a `String`. This covers YAML that does
-  not parse at all, a missing required field, and an unknown field at any
-  level, since every serde struct
+  `yaml_serde::Error`'s message as a `String`. `yaml_serde` is used in
+  place of `serde_yaml`, which is archived and no longer maintained. This
+  covers YAML that does not parse at all, a missing required field, and an
+  unknown field at any level, since every serde struct
   (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`, `CodeLinkDoc`) carries
-  `#[serde(deny_unknown_fields)]`.
+  `#[serde(deny_unknown_fields)]`, so a typo'd field name such as
+  `governes` for `governs` fails parsing loudly instead of being dropped
+  silently.
 - `MandateParseError::InvalidRule { id, reason }`, produced after the YAML
   shape has already parsed, when a rule's `type` and its fields disagree:
   `type: script` without `run`, `type: script` with a `prompt` present,
@@ -32,8 +35,16 @@ instead, once a `Mandate` value exists to check.
 `validate` in `src/domain/model/validation.rs` takes a `Mandate` and a
 `&FileTreeSnapshot` and returns a `ValidationReport { errors, warnings, ... }`
 built in one pass: every check in the function runs regardless of what
-earlier checks found. `report.is_valid()` is `true` exactly when `errors`
-is empty; `warnings` never affects it.
+earlier checks found, so an author fixing a mandate sees every problem at
+once rather than discovering errors one run at a time. `report.is_valid()`
+is `true` exactly when `errors` is empty; `warnings` never affects it.
+
+A mandate rarely links every document to code, or every rule to a document,
+especially while it is being written, so partial coverage is expected and
+not an error: a governed document that no `code` entry links to, an empty
+`governs` list, and an empty `code` list are all valid. Only an empty
+`rules` list is an error, since a mandate with no rules at all has nothing
+to validate against.
 
 The CLI adapter's `validation_lines` method renders the report as one
 string per finding, errors first in validator order, then warnings, each

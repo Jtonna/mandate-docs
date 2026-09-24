@@ -2,7 +2,7 @@
 
 This is the architecture overview of the mandate parser crate's internals,
 for a reader who wants the file-by-file shape and the driven ports'
-contracts. See [`mandate-parser-overview.md`](mandate-parser-overview.md)
+contracts. See [`mandate-parser.md`](mandate-parser.md)
 for the crate's overall shape.
 
 ## The pieces
@@ -22,7 +22,7 @@ for the crate's overall shape.
 | `src/adapters/driven/file_tree/fs_file_tree_source.rs` | driven adapter | `FsFileTreeSource<F>`, generic over `FileSystem`, a `FileTreeSource` that walks the filesystem. |
 | `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore<F>`, generic over `FileSystem`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
-| `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `validation_lines`, `report_lines` and `render` produce and write the report text. `run` executes the use case and writes the report or error. Neither the adapter nor its tests do any I/O other than to the provided writers; `main.rs` wires the adapters and maps `report.is_valid()` to the exit code. |
+| `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `validation_lines`, `report_lines` and `render` produce and write the report text; rendering lives here rather than in the domain, so the domain carries only data and rendering can change, or grow another driving adapter with its own rendering, without touching it. `run` executes the use case and writes the report or error. Neither the adapter nor its tests do any I/O other than to the provided writers; `main.rs` wires the adapters and maps `report.is_valid()` to the exit code. |
 | `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
 | `src/lib.rs` | composition root | Declares the `adapters` and `domain` modules. |
 
@@ -56,6 +56,13 @@ snapshot, and answers `false` rather than erroring when `dir` itself
 cannot be read, so an unreadable ancestor is a reason it cannot be the
 root and never a reason to stop looking further up. `FsFileTreeSource<F>`
 is generic over `FileSystem` and is the sole adapter implementation.
+
+`SourceError` and `StoreError`, the error types on these two ports, are
+domain types rather than the filesystem library's own error type, so no
+vendor detail leaves the adapter. `RunError::Source(SourceError)` and
+`RunError::Store(StoreError)` carry them into the use case's `RunError`,
+so a caller can match on the typed port error rather than parsing a
+string to tell one failure from another.
 
 `MandateStore` has two methods:
 

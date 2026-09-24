@@ -3,7 +3,7 @@
 This is the architecture overview of how the mandate parser crate's tests
 are wired, for a reader who wants to know how the suite proves the crate's
 behaviour and how to run it. See
-[`mandate-parser-overview.md`](mandate-parser-overview.md) for the crate's
+[`mandate-parser.md`](mandate-parser.md) for the crate's
 overall shape and [`ports-and-adapters.md`](ports-and-adapters.md) for the
 `FileSystem` seam the fixtures build on.
 
@@ -18,16 +18,19 @@ separate crate, and can use only the public API.
 | `src/domain/model/validation.rs` | unit, in-file | Every validation error and warning, and their `Display` strings, using a private fake `&FileTreeSnapshot` builder so the domain test module imports nothing from an adapter. |
 | `src/domain/usecases/run_mandates.rs` | unit, in-file | `RunMandates` behaviour with private doubles: discovery, selection, an unknown mandate name, a parse failure alongside a valid mandate, and an empty mandates folder. |
 | `tests/fs_adapters.rs` | integration | `FsFileTreeSource` and `FsMandateStore` against real temporary directories, and `OsFileSystem` directly. |
-| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and rendering (`validation_lines`, `report_lines`, `render`), with in-memory writers. No process is launched. `run` is exercised only by the `cli_run` fixture cases below. |
+| `src/adapters/driving/cli/mod.rs` | unit, in-file | Argument parsing and rendering (`validation_lines`, `report_lines`, `render`), with in-memory writers. No process is launched, since the built binary is expected to gain startup side effects of its own over time. `run` is exercised only by the `cli_run` fixture cases below. |
 | `tests/fixtures/support.rs` | unit, in-file | `FakeVirtualMachine` (implements `FileSystem`, holds paths and mandate texts, built from a mandate with every linked file present, then edited with `add`, `remove`, `rename` and `with_mandate`) plus `parse`, `check` and the `assert_*` helpers. Fixtures build the real `FsFileTreeSource` and `FsMandateStore` over it. Has its own unit tests. |
 | `tests/fixtures/<case>/mod.rs` | integration | One fixture case, one or more tests, inside the `fixtures` target. |
-| `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Never reads docs/, never runs the binary. |
+| `tests/architecture.rs` | integration, reads source text | Three tests enforcing the dependency rules: domain imports no adapter or vendor crate; adapters import no use case; only main.rs constructs concrete adapters. Catching a violation in the suite, rather than leaving it to drift unnoticed until a reviewer happens to spot it, is why these rules are a test rather than a convention. Never reads docs/, never runs the binary. |
 
 Tests never read `docs/`, and no test runs the built binary. This repository
 has no `.mandate/` folder to read.
 
 Fixture tests wire the real driven adapters over one fake, so validator and
-use case logic is exercised without a real disk. `FakeVirtualMachine` is
+use case logic is exercised without a real disk. A fake that reimplements
+a driven port directly, rather than the layer below it, can drift from the
+real adapter's behaviour, which happened once in this crate; building on
+the shared `FileSystem` seam instead avoids that. `FakeVirtualMachine` is
 the only fake in this picture: it implements the `FileSystem` seam in
 memory, holding paths and mandate texts instead of touching disk.
 `FsFileTreeSource`, `FsMandateStore`, `YamlMandateParser` and

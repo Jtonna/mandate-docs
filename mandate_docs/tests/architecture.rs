@@ -1,4 +1,4 @@
-//! Architecture enforcement from docs/architecture/PORTS_AND_ADAPTERS_GUIDE.md
+//! Architecture enforcement from docs/reference/HEXAGONAL_ARCHITECTURE_PORTS_AND_ADAPTERS_REFERENCE.md
 //! section 7: fail the build if domain/ imports from adapters/ or vendor.
 //! This test reads the crate's own source, never docs/ or the binary.
 

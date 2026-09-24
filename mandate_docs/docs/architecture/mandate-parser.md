@@ -84,5 +84,3 @@ the two filesystem-facing adapters, `FsFileTreeSource` and
   cases, and how to run it.
 - [`../reference/mandate-format-checks.md`](../reference/mandate-format-checks.md):
   what parsing rejects and what validation checks, structured for lookup.
-- [`decisions/`](decisions/): the architecture decision records behind the
-  choices above.
