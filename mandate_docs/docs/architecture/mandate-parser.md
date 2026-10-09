@@ -1,28 +1,28 @@
 # Mandate parser, validator and run command
 
-This is the architecture overview of the mandate parser, validator and run
-command crate, for a reader who wants the big picture before going deeper
-into any one part.
+This overview gives the big picture of the mandate parser, validator and run
+command crate. The documents it links to go deeper into each part.
 
 ## Purpose
 
-A Rust crate that finds a project's `.mandate` folder, parses every selected
-mandate YAML file into a Rust value, validates each against the mandate
-format and against one shared snapshot of the file tree, and reports every
-problem it finds in one pass. It does not read or write `mandate.json` and
-does not execute a rule; those are separate pieces that do not exist yet.
+This Rust crate finds a project's `.mandate` folder and parses every selected
+mandate YAML file into a Rust value. It validates each one against the mandate
+format and against one shared snapshot of the file tree. Every validation
+problem is reported in one pass. A file that fails to parse reports its
+first parse error, and the run carries on with the other mandates. The crate
+does not read or write `mandate.json` and does not execute a rule. Those are
+separate pieces that do not exist yet.
 
 ## Architecture at a glance
 
-The crate follows the hexagonal ports and adapters pattern, scaled to the
-size of the problem: the domain in the middle owns the interfaces it needs,
-adapters on the outside implement them, and nothing inside depends on
-anything outside. Here that means three driven ports, three adapters, and
-one domain/usecases use case that owns discovery, selection and reporting.
-Dependencies point inward: `main.rs` (the composition root) wires concrete
-adapters into the domain, the CLI driving adapter calls the use case, and
-the use case calls the three driven ports; nothing in the domain imports an
-adapter.
+The crate follows the hexagonal (ports and adapters) pattern. The domain in
+the middle owns the interfaces it needs, adapters on the outside implement
+them, and nothing inside depends on anything outside. The crate has three
+driven ports, three adapters, and one use case in `domain/usecases` that
+owns discovery, selection and reporting. Dependencies point inward.
+`main.rs`, the composition root, wires concrete adapters into the domain.
+The CLI driving adapter calls the use case, and the use case calls the three
+driven ports. Nothing in the domain imports an adapter.
 
 ```mermaid
 flowchart LR
@@ -44,7 +44,8 @@ flowchart LR
         OS["OsFileSystem"]
     end
 
-    MAIN["main.rs\n(composition root)"] -- builds --> CLI
+    MAIN["main.rs\n(composition root)"] -- calls --> CLI
+    MAIN -- builds --> RM
     MAIN -- builds --> FTS
     MAIN -- builds --> MS
     MAIN -- builds --> YP
@@ -62,16 +63,17 @@ flowchart LR
     FS -.implemented by.-> OS
 ```
 
-Reading the picture from the left: `main.rs` builds the three driven
-adapters (`FsFileTreeSource`, `FsMandateStore`, `YamlMandateParser`) and
-calls into the CLI driving adapter, a set of free functions with no state
-of its own to build. The CLI adapter calls the `RunMandates` use case in
-the domain. `RunMandates` calls the three driven ports (`FileTreeSource`,
+Reading the picture from the left, `main.rs` builds the three driven
+adapters (`FsFileTreeSource`, `FsMandateStore`, `YamlMandateParser`), hands
+them to a new `RunMandates` use case, and calls into the CLI driving
+adapter. The CLI adapter is a set of free functions with no state, so
+there is nothing to build. It calls the `RunMandates` use case it was
+given. `RunMandates` calls the three driven ports (`FileTreeSource`,
 `MandateStore`, `MandateParser`) and reads and writes the domain model
-types. Each port is implemented by exactly one of the driven adapters, and
-the two filesystem-facing adapters, `FsFileTreeSource` and
-`FsMandateStore`, both go through the `FileSystem` seam, which
-`OsFileSystem` implements for real disk access.
+types. Exactly one driven adapter implements each port. The two
+filesystem-facing adapters, `FsFileTreeSource` and `FsMandateStore`, both go
+through the `FileSystem` seam, which `OsFileSystem` implements for real
+disk access.
 
 ## Where to read next
 
