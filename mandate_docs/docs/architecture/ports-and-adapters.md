@@ -2,8 +2,8 @@
 
 This is the architecture overview of the mandate parser crate's internals,
 for a reader who wants the file-by-file shape and the driven ports'
-contracts. See [`mandate-parser.md`](mandate-parser.md)
-for the crate's overall shape.
+contracts. See [`mandate-parser.md`](mandate-parser.md) for the crate's
+overall shape.
 
 ## The pieces
 
@@ -23,23 +23,24 @@ for the crate's overall shape.
 | `src/adapters/driven/mandate_store/fs_mandate_store.rs` | driven adapter | `FsMandateStore<F>`, generic over `FileSystem`, a `MandateStore` that lists and reads `.yaml` files under `<root>/.mandate/mandates/`. |
 | `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` | driven adapter | `YamlMandateParser`, a `MandateParser`. Turns mandate YAML text into a `Mandate`. |
 | `src/adapters/driving/cli/mod.rs` | driving adapter | `parse_args` turns the process argument list into an `Invocation`. `validation_lines`, `report_lines` and `render` produce and write the report text; rendering lives here rather than in the domain, so the domain carries only data and rendering can change, or grow another driving adapter with its own rendering, without touching it. `run` executes the use case and writes the report or error. Neither the adapter nor its tests do any I/O other than to the provided writers; `main.rs` wires the adapters and maps `report.is_valid()` to the exit code. |
-| `src/main.rs` | composition root | Collects the process arguments, builds the real adapters, runs `RunMandates`, and prints and exits according to the report. |
+| `src/main.rs` | composition root | Collects the process arguments, builds the real adapters and `RunMandates`, passes them to `cli::run`, and exits according to the report. |
 | `src/lib.rs` | composition root | Declares the `adapters` and `domain` modules. |
 
 Dependencies point one way: the adapters, the domain/usecases and the
-composition root import the rest of the domain; the domain imports nothing outside
-`std`. `FileTreeSource`, `MandateStore` and `MandateParser` are driven ports
-because `RunMandates` calls them to reach the filesystem and the YAML
-parser; `src/adapters/driving/cli/mod.rs` is the sole driving adapter, since nothing
-else calls into the crate yet.
+composition root import the rest of the domain; the domain imports nothing
+outside `std`. `FileTreeSource`, `MandateStore` and `MandateParser` are driven
+ports because `RunMandates` calls them to reach the filesystem and the YAML
+parser; `src/adapters/driving/cli/mod.rs` is the sole driving adapter, since
+nothing else calls into the crate yet.
 
 The `serde`-derived structs (`MandateDoc`, `RuleDoc`, `GovernedDocDoc`,
-`CodeLinkDoc`) live only in `src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` and never leave that
-module. `parse_mandate` maps each one into the plain domain types in
+`CodeLinkDoc`) live only in
+`src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` and never leave
+that module. `parse_mandate` maps each one into the plain domain types in
 `src/domain/model/mandate.rs` before returning. This follows the ports and
-adapters rule that no library type may enter the domain: the domain types
-carry no `serde` attributes and would compile unchanged if the YAML
-library were replaced.
+adapters rule that no library type may enter the domain. The domain types carry
+no `serde` attributes and would compile unchanged if the YAML library were
+replaced.
 
 ## The ports
 
@@ -52,17 +53,16 @@ fn has_directory(&self, dir: &Path, name: &str) -> Result<bool, SourceError>;
 
 `snapshot` walks the whole tree under `root`. `has_directory` answers
 whether `dir` contains a directory entry named `name`, without building a
-snapshot, and answers `false` rather than erroring when `dir` itself
-cannot be read, so an unreadable ancestor is a reason it cannot be the
-root and never a reason to stop looking further up. `FsFileTreeSource<F>`
+snapshot. It answers `false` rather than erroring when `dir` itself cannot be
+read, so an unreadable ancestor cannot be the root but never stops the search
+further up. `FsFileTreeSource<F>`
 is generic over `FileSystem` and is the sole adapter implementation.
 
 `SourceError` and `StoreError`, the error types on these two ports, are
-domain types rather than the filesystem library's own error type, so no
-vendor detail leaves the adapter. `RunError::Source(SourceError)` and
+domain types rather than the filesystem seam's own `FileSystemError`, so no
+adapter detail leaves the adapter. `RunError::Source(SourceError)` and
 `RunError::Store(StoreError)` carry them into the use case's `RunError`,
-so a caller can match on the typed port error rather than parsing a
-string to tell one failure from another.
+so a caller can match on the typed error instead of parsing a string.
 
 `MandateStore` has two methods:
 
@@ -71,35 +71,42 @@ fn list(&self, root: &Path) -> Result<Vec<String>, StoreError>;
 fn read(&self, root: &Path, file_name: &str) -> Result<MandateFile, StoreError>;
 ```
 
-The port also defines `MANDATE_DIR` (".mandate") and `MANDATES_DIR`
-(".mandate/mandates"), used by the adapter and the use case. `list` returns the
+The port also defines `MANDATE_DIR` (".mandate"), `MANDATES_SUBDIR`
+("mandates") and `MANDATES_DIR` (".mandate/mandates"), used by the adapter and
+the use case. `list` returns the
 file names of the `.yaml` files directly in `<root>/.mandate/mandates/`,
 sorted; `read` returns one file's text. `FsMandateStore<F>` is generic over
 `FileSystem` and is the sole adapter implementation.
 
 `MandateParser` has one method, turning mandate text into a `Mandate` or a
-`MandateParseError`; `YamlMandateParser` in
-`src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` is the sole adapter.
-`MandateParseError` is a domain type declared on the port, so the YAML crate's
-internal error never leaves the adapter. It is described in full in
+`MandateParseError`:
+
+```rust
+fn parse(&self, text: &str) -> Result<Mandate, MandateParseError>;
+```
+
+`YamlMandateParser` in
+`src/adapters/driven/mandate_parser/yaml_mandate_parser.rs` is the sole
+adapter. `MandateParseError` is a domain type declared on the port, so the YAML
+crate's internal error never leaves the adapter. It is described in full in
 [`../reference/mandate-format-checks.md`](../reference/mandate-format-checks.md).
 
 ## The file system seam
 
-`FileSystem` is not a port the domain calls; it is an adapter-internal seam
-that lets the driven adapters abstract away filesystem calls. This lets
-fixture tests run the real `FsFileTreeSource` and `FsMandateStore` adapters
-over a fake in-memory implementation (`FakeVirtualMachine`) without touching
-disk, proving the adapters' real logic against fixture data. See
+`FileSystem` is not a port the domain calls. It is an adapter-internal seam
+between the driven adapters and the filesystem calls they make. Fixture tests
+use it to run the real `FsFileTreeSource` and `FsMandateStore` adapters over a
+fake in-memory implementation (`FakeVirtualMachine`), so the adapters' own
+logic is tested against fixture data without touching disk. See
 [`testing.md`](testing.md) for how the fixtures use it.
 
 `FakeVirtualMachine` in `tests/fixtures/support.rs` implements `FileSystem`,
-holding paths and mandate texts. A fixture builds the real adapters over the
-fake: `FsFileTreeSource::new(fake_fs)` and `FsMandateStore::new(fake_fs)`.
-Because the adapters see the same `FileSystem` interface in tests and in
-production, the real adapters are exercised on fake data, and their behaviour
-is covered without test doubles.
+holding paths and mandate texts. A fixture builds the real adapters over a
+shared reference to the fake: `FsFileTreeSource::new(vm)` and
+`FsMandateStore::new(vm)`, where `vm` is a `&FakeVirtualMachine`.
+The adapters see the same `FileSystem` interface in tests and in production,
+so the tests need no substitute for the adapters themselves.
 
-Each port's doc comment states its contract: `snapshot` path format and
-symlink policy, `has_directory` cheapness, `read` bare-file-name rule, and
-the error types on the parser and store ports.
+Each port's doc comment states its contract: the `snapshot` path format and
+symlink policy, the `has_directory` cheapness rule, the `read` bare-file-name
+rule, and the variants of `MandateParseError`.
