@@ -1,10 +1,9 @@
 # The run command
 
-This is the architecture overview of one flow through the mandate parser
+This architecture overview follows one flow through the mandate parser
 crate, for a reader who wants to know what happens end to end when the
-`mandate` command runs. See
-[`mandate-parser.md`](mandate-parser.md) for the crate's
-overall shape.
+`mandate` command runs. See [`mandate-parser.md`](mandate-parser.md) for
+the crate's overall shape.
 
 ## How a run flows
 
@@ -18,6 +17,7 @@ sequenceDiagram
     participant Parser as MandateParser
 
     Main->>CLI: parse_args(argv)
+    Main->>CLI: run(invocation, start_dir, ...)
     CLI->>RM: execute(start_dir, selected)
     loop each ancestor upward
         RM->>Src: has_directory(dir, ".mandate")
@@ -36,65 +36,65 @@ sequenceDiagram
     Main->>Main: exit code from report.is_valid()
 ```
 
-In order, one run does this: `main.rs` calls `parse_args` on the CLI
-adapter to turn the process arguments into an invocation, then calls
+One run goes as follows. `main.rs` calls `parse_args` on the CLI adapter
+to turn the process arguments into an invocation. It then calls `run` on the
+CLI adapter with that invocation and the starting directory, and `run` calls
 `execute` on `RunMandates` with the starting directory and the selected
 mandate names. `RunMandates` checks each ancestor directory upward with
-`FileTreeSource::has_directory` until it finds one holding `.mandate`,
-takes one snapshot of that root with `FileTreeSource::snapshot`, and lists
-the available mandates with `MandateStore::list`. It selects which
-mandates to run, then for each one reads its text with `MandateStore::read`,
-parses it with `MandateParser::parse`, and validates the parsed mandate
-against the shared snapshot. The finished report goes back to the CLI
-adapter, which renders it to the output writer, and back to `main.rs`,
-which turns the report into an exit code.
+`FileTreeSource::has_directory` until one holds `.mandate`. It takes one
+snapshot of that root with `FileTreeSource::snapshot` and lists the
+available mandates with `MandateStore::list`. After choosing which mandates
+to run, it reads each one with `MandateStore::read`, parses it with
+`MandateParser::parse`, and validates the result against the shared
+snapshot. The report goes back to the CLI adapter, which renders it to the
+output writer, and then to `main.rs`, which turns it into an exit code.
 
 **Discovery.** With no `--root`, discovery starts at the current directory.
 `RunMandates::discover_root` checks each ancestor in turn with
-`FileTreeSource::has_directory(dir, ".mandate")`, a cheap existence check
-that answers `false`, rather than erroring, when a directory cannot be
-read; if the check comes back false, it moves to the parent and repeats.
-Reaching the filesystem root without finding one is not an error, since
-nothing has gone wrong, there is simply nothing to check yet; the report
-prints a warning instead and exits 0. It never looks inside child
-directories, so a nested project with its own `.mandate` is ignored. Only
-the ancestor that turns out to hold `.mandate` is ever snapshotted; every
-ancestor tried above it gets only the existence check, never a full walk of
-its tree. This is recorded in the doc comment on `discover_root`; snapshotting
-every ancestor while searching meant walking directories the current user
-does not own, and a real run failed with "Access is denied" on an unrelated
-system temp folder before it could even report `.mandate` was never found.
+`FileTreeSource::has_directory(dir, ".mandate")`. This is a cheap existence
+check that answers `false`, not an error, when a directory cannot be read.
+On `false`, discovery moves to the parent and repeats. Reaching the
+filesystem root without finding `.mandate` is not an error, because there is
+nothing to check yet. The report prints a warning and the run exits 0.
+Discovery never looks inside child directories, so a nested project with
+its own `.mandate` is ignored. Only the ancestor that holds `.mandate` is
+snapshotted. Every ancestor above it gets the existence check and never a
+full walk of its tree. Snapshotting every ancestor would walk directories
+the current user does not own. A real run hit this and failed with "Access
+is denied" on an unrelated system temp folder before it could report that
+`.mandate` was missing. The doc comment on `discover_root` records this.
 
-**Snapshot.** `RunMandates` shares the one snapshot taken at the
-discovered root across every mandate validated in the run, so every
-mandate sees the exact same view of the file tree rather than one that
-could change between mandates. `validate` never takes its own snapshot;
-it takes a plain `&FileTreeSnapshot` value, so it carries no dependency on
-I/O or on the ports.
+**Snapshot.** `RunMandates` shares the one snapshot of the discovered root
+across every mandate in the run, so all mandates see the same view of the
+file tree and it cannot change between them. `validate` never takes its own
+snapshot. It takes a plain `&FileTreeSnapshot` value, so it has no
+dependency on I/O or on the ports.
 
 **Selection.** `MandateStore::list` returns the `.yaml` file names directly
-in `.mandate/mandates/`. Selection is by full file name, case-sensitive; the
-`name:` field inside a mandate is descriptive only and plays no part in
-selection. With no names given on the command line, every listed mandate
-runs. An empty mandates folder is `RunWarning::NoMandatesFound`, not an
-error. A name on the command line that matches no file is
+in `.mandate/mandates/`. Selection is by full file name and is
+case-sensitive. The `name:` field inside a mandate is descriptive only and
+plays no part. With no names given on the command line, every listed
+mandate runs. An empty mandates folder gives `RunWarning::NoMandatesFound`,
+not an error. A command-line name that matches no file gives
 `RunError::UnknownMandate` and stops the run before anything is validated.
 
-**Per-mandate outcome.** Every selected mandate is read, parsed and
-validated in turn. A parse failure is recorded in that mandate's slot as
-`MandateResult::ParseFailed`, and the run continues with the rest; it does
-not stop the run the way an unknown name does, so one invalid mandate does
-not prevent the rest of the run from being reported.
+**Per-mandate outcome.** Each selected mandate is read, parsed and validated
+in turn. A parse failure is recorded in that mandate's slot as
+`MandateResult::ParseFailed` and the run continues. Unlike an unknown name,
+one invalid mandate does not stop the rest from being reported. A
+failure to read a mandate file is a `RunError` and does stop the run.
 
-**Reporting and exit codes.** `RunMandates` fills the report with everything
-it finds; it never calls `std::process::exit`. The CLI adapter's `run` method
-executes the use case, writes the report or error, and returns `Some(report)`
-or `None`. `main.rs` wires the adapters, calls `cli::run`, and maps the result
-to the exit code: `0` when the report is `Some` and `is_valid()` is `true`,
-`1` otherwise. This split means a planned long-running mode can keep running
-instead of exiting after an invalid report. Exit code `0` for an empty
-mandates folder or when no `.mandate` folder is found, since a warning is
-not a failure.
+**Reporting and exit codes.** `RunMandates` fills the report with
+everything it finds and never calls `std::process::exit`. The CLI adapter's
+`run` function executes the use case, writes the report to the output writer
+or the error to the error writer, and returns `Some(report)` or `None`.
+`main.rs` wires the adapters, calls `cli::run`, and maps the result to the
+exit code. The code is `0` when the report is `Some` and `is_valid()` is
+`true`, and `1` otherwise. An argument error or an unreadable current
+directory also exits `1`, before the use case runs. Keeping the decision in
+`main.rs` lets a planned long-running mode keep running after an invalid
+report. An empty mandates folder and a missing `.mandate` folder both exit
+`0`, because a warning is not a failure.
 
 ## The report
 
@@ -108,12 +108,12 @@ a file name with a `MandateResult` of `ParseFailed(MandateParseError)` or
 is `true` when no outcome is a parse failure and every `ValidationReport` is
 valid.
 
-Nothing prints during the run: `RunMandates` only fills the report. The report
-is plain data; the CLI adapter's `render` writes it out once the run is finished,
-in the layout below.
+Nothing prints during the run, because `RunMandates` only fills the report.
+The report is plain data. The CLI adapter's `render` writes it out once the
+run is finished, in the layout below.
 
-The naming convention is `RunReport<Phase>`, so a later phase (rule
-execution) gets its own `RunReport` type rather than growing this one.
+Types follow the naming convention `RunReport<Phase>`. A later phase, such
+as rule execution, gets its own `RunReport` type and does not grow this one.
 
 Rendered layout when `.mandate` is found:
 
@@ -141,11 +141,11 @@ warning: no .mandate folder found from <dir> up to the filesystem root
 0 mandates checked, 0 invalid
 ```
 
-Each mandate's block starts with its file name, then its `ValidationReport`
-lines indented two spaces (or a `failed to parse: <message>` line for a
-parse failure), then a summary line: `valid: ...` or
-`invalid: <n> errors, <n> warnings`. The final line always reports the
-total mandates checked and how many were invalid.
+Each mandate's block starts with its file name. Next come its
+`ValidationReport` lines indented two spaces, or a
+`failed to parse: <message>` line for a parse failure. A summary line
+follows: `valid: ...` or `invalid: <n> errors, <n> warnings`. The final
+line always reports the total mandates checked and how many were invalid.
 
 The message text each finding prints is defined in
 [`../reference/mandate-format-checks.md`](../reference/mandate-format-checks.md).
