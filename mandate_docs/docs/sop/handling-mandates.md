@@ -5,8 +5,8 @@
 A mandate links documentation to the code it describes and carries the rules
 that keep that documentation honest. Writing one by hand, or changing one,
 touches two files that must stay in step: the mandate itself and
-`.mandate/mandate.json`. This procedure is the sequence that keeps them
-consistent and keeps the mandate parseable and valid.
+`.mandate/mandate.json`. These steps keep the two consistent and the
+mandate parseable and valid.
 
 ## Scope
 
@@ -16,7 +16,7 @@ cover writing the documents a mandate governs, which follow the guidelines
 for their document type. It does not cover running a rule: nothing runs
 rules yet.
 
-### Before you start
+## Before you start
 
 - Confirm mandate is installed in the project you are working in. This
   procedure applies there; this repository does not yet carry a
@@ -30,9 +30,9 @@ rules yet.
    relative to the mandate file itself.
 
 2. Create `.mandate/mandates/<Name>.yaml` with the five fields `name`,
-   `description` (optional), `rules`, `governs` and `code`. Every rule is
-   either `type: script` with a `run` command, or `type: agent` with a
-   `prompt`. Every path listed under a `code` entry's `docs` must name a
+   `description` (optional), `rules`, `governs` and `code`. Every rule has an
+   `id` and is either `type: script` with a `run` command, or `type: agent`
+   with a `prompt`. Every path listed under a `code` entry's `docs` must name a
    document present in `governs`.
 
 3. Validate the mandate. Run `mandate` from anywhere inside the project:
@@ -55,11 +55,11 @@ rules yet.
 
    A valid result shows the mandate's file name followed by a `valid: <n>
    rules, <n> documents, <n> source files` line, and the run exits `0`.
-   Any `error:` or `warning:` line printed under the mandate's name means
-   step 4 or step 5 below applies before moving on.
+   Any `error:`, `warning:` or `failed to parse:` line printed under the
+   mandate's name means step 4 or step 5 below applies before moving on.
 
-4. Fix every reported error before moving on. See the message reference at
-   the end of this section for what each one means and how to fix it.
+4. Fix every reported error before moving on. See the message reference
+   below for what each one means and how to fix it.
 
 5. Decide about each warning, of the form `rule '<id>' is defined but no
    document references it`. Either reference the rule from a document's
@@ -80,7 +80,7 @@ rules yet.
    describe, so a change never leaves its documentation or its mandate
    behind in a later commit.
 
-### Message reference
+## Message reference
 
 Messages `mandate` can print, either about the run or about one mandate,
 and what to do about each one:
@@ -88,15 +88,19 @@ and what to do about each one:
 | Message | What to do |
 |---|---|
 | `warning: no .mandate folder found from <dir> up to the filesystem root` | Run `mandate` from inside a project that has a `.mandate` folder, or create one at the project root. The run exits 0 with zero mandates checked. |
-| `warning: no mandates found in <dir>` | The `.mandate` folder was found but `.mandate/mandates/` has no `.yaml` files in it. Add a mandate, or leave it empty; the run still exits 0 with zero mandates checked. |
+| `warning: no mandates found in <dir>` | The `.mandate` folder was found but `.mandate/mandates/` has no `.yaml` files in it or does not exist. Add a mandate, or leave it empty; the run still exits 0 with zero mandates checked. |
 | `unknown mandate '<file>'; available mandates are: <a.yaml>, <b.yaml>` | Correct the file name passed on the command line, or check the file exists in `.mandate/mandates/`. This stops the run before any mandate is checked, so nothing else is reported until the name is fixed. |
-| `no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
-| `duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |
-| `rule '<rule>' is referenced by <doc> but not defined` | Either add a `rules` entry with that `id`, or remove the reference from that document's `rules` list under `governs`. |
-| `code <path> links <doc> which this mandate does not govern` | Add `<doc>` to `governs`, or remove it from that `code` entry's `docs` list. |
-| `governed document not found: <doc>` | Create the document at that path, or correct the path if it was mistyped. |
-| `missing source file: <path>` | Create the file, or correct the path if it was mistyped. |
-| `failed to parse: ...` | A shape problem: an unknown field, a missing required field, an unknown rule `type`, a rule missing the field its `type` requires (`run` for `type: script`, `prompt` for `type: agent`), or a rule declaring the field that belongs to the other type. The message names the offending field or rule id; fix it and re-run. |
+| `error: no rules defined; a mandate needs at least one` | Add at least one entry under `rules`. |
+| `error: duplicate rule id '<id>'` | Rename one of the two rules sharing that `id`. |
+| `error: rule '<rule>' is referenced by <doc> but not defined` | Either add a `rules` entry with that `id`, or remove the reference from that document's `rules` list under `governs`. |
+| `error: code <path> links <doc> which this mandate does not govern` | Add `<doc>` to `governs`, or remove it from that `code` entry's `docs` list. |
+| `error: governed document not found: <doc>` | Create the document at that path, or correct the path if it was mistyped. |
+| `error: missing source file: <path>` | Create the file, or correct the path if it was mistyped. |
+| `warning: rule '<id>' is defined but no document references it` | Either reference the rule from a document's `rules` list under `governs`, or remove the rule. Leaving it unreferenced is allowed; it is a warning, not an error. |
+| `failed to parse: ...` | A shape problem; the text after the prefix names the offending field or rule id. The printed forms are `failed to parse: malformed mandate: <yaml error text>` (bad YAML, an unknown field, or a missing required field: fix the field the text names), `failed to parse: rule '<id>': type: script requires 'run'` (add `run` to that rule), `failed to parse: rule '<id>': type: script must not declare 'prompt'` (remove `prompt`), `failed to parse: rule '<id>': type: agent requires 'prompt'` (add `prompt`), `failed to parse: rule '<id>': type: agent must not declare 'run'` (remove `run`), and `failed to parse: rule '<id>': unknown rule type '<type>'` (use `script` or `agent`). Fix it and re-run. |
+| `usage: mandate [--root <dir>] [<mandate-file>.yaml ...]` | `--root` was given without a directory. Pass the directory after `--root`, or drop the flag. Nothing is checked and the run exits non-zero. |
+| `unknown option '<option>'` | An argument starting with `-` is not `--root`. Remove it. Nothing is checked and the run exits non-zero. |
+| `failed to determine current directory: <os error text>` | The shell's working directory could not be read, for example because it was deleted. Run `mandate` from an existing directory, or pass `--root <dir>`. The run exits non-zero. |
 
 ## When this SOP changes
 
