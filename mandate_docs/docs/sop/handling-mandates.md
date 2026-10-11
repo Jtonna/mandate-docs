@@ -2,25 +2,14 @@
 
 ## Purpose
 
-A mandate links documentation to the code it describes and carries the rules
-that keep that documentation honest. Writing one by hand, or changing one,
-touches two files that must stay in step: the mandate itself and
-`.mandate/mandate.json`. These steps keep the two consistent and the
-mandate parseable and valid.
+These steps keep a mandate file and `.mandate/mandate.json` consistent, and
+the mandate parseable and valid.
 
 ## Scope
 
 Covers writing a new mandate file in `.mandate/mandates/`, changing an
 existing one, and updating `.mandate/mandate.json` to match. It does not
-cover writing the documents a mandate governs, which follow the guidelines
-for their document type. It does not cover running a rule: nothing runs
-rules yet.
-
-## Before you start
-
-- Confirm mandate is installed in the project you are working in. This
-  procedure applies there; this repository does not yet carry a
-  `.mandate/` folder of its own.
+cover writing the documents a mandate governs or running a rule.
 
 ## Steps
 
