@@ -8,3 +8,7 @@ dist/
 build/
 .mcp.json
 target/
+
+.claude/skills/doc-lifecycle/
+.claude/skills/mandate-docs-create/
+.claude/skills/mandate-docs-maintain/

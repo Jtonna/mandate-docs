@@ -1,0 +1,98 @@
+# Fixture data for the run_no_mandate_folder test case.
+#
+# This describes a fictional command-line todo app that does not exist.
+# FakeVirtualMachine::with_every_file_in builds a fake file tree from
+# these links, so no path here needs to exist on disk. This is not a
+# mandate for this repository.
+
+name: Todo_App
+
+# Human-facing only. Says what this mandate is meant to cover, for whoever
+# opens the file. It is not passed to agents when rules run.
+description: >
+  Covers the todo list domain and CLI in src/, and the procedure for
+  adding a task.
+
+# Rules are defined once and referenced by id from the documents they
+# apply to. At least one rule is required.
+rules:
+  - id: claims-match-code
+    type: agent
+    description: Documented behaviour matches what the code actually does.
+    prompt: >
+      Read the document and the linked source. Report any claim the code
+      contradicts.
+
+  - id: sop-shape
+    type: agent
+    description: The SOP has the sections an SOP requires and names an owner.
+    prompt: >
+      Confirm the document has Purpose, Scope, Owner and Steps in order,
+      and that Owner names a person.
+
+  - id: commands-work
+    type: agent
+    description: Every command the document shows behaves as described.
+    prompt: >
+      Check each shown command against the linked source. Report any
+      mismatch in flags, output or exit code.
+
+# The documents this mandate governs, and which rules apply to each.
+governs:
+  - doc: docs/architecture/todo-list.md
+    rules:
+      - claims-match-code
+
+  - doc: docs/sop/adding-a-task.md
+    rules:
+      - sop-shape
+      - commands-work
+      - claims-match-code
+
+# The source files, and which of the documents above each one links to.
+code:
+  - path: src/todo/task.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: src/todo/list.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: src/todo/ports/task_store.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: src/adapters/driven/json_task_store.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: src/adapters/driven/clock.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: src/adapters/driving/cli.rs
+    docs:
+      - docs/architecture/todo-list.md
+      - docs/sop/adding-a-task.md
+
+  - path: src/main.rs
+    docs:
+      - docs/architecture/todo-list.md
+      - docs/sop/adding-a-task.md
+
+  - path: tests/fixtures/support.rs
+    docs:
+      - docs/architecture/todo-list.md
+
+  - path: tests/adding_a_task.rs
+    docs:
+      - docs/sop/adding-a-task.md
+
+  - path: docs/examples/sample-list.json
+    docs:
+      - docs/sop/adding-a-task.md
+
+  - path: scripts/check-commands.sh
+    docs:
+      - docs/sop/adding-a-task.md

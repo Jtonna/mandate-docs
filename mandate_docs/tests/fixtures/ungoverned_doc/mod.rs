@@ -11,6 +11,6 @@ fn fails_when_code_links_a_doc_this_mandate_does_not_govern() {
 
     assert_fails(
         lines,
-        &["code src/domain/mandate.rs links docs/architecture/other.md which this mandate does not govern"],
+        &["code src/todo/task.rs links docs/architecture/other.md which this mandate does not govern"],
     );
 }

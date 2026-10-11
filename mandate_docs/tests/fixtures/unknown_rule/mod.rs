@@ -11,6 +11,6 @@ fn fails_when_a_document_references_an_undefined_rule() {
 
     assert_fails(
         lines,
-        &["rule 'no-such-rule' is referenced by docs/architecture/mandate-parser.md but not defined"],
+        &["rule 'no-such-rule' is referenced by docs/architecture/todo-list.md but not defined"],
     );
 }

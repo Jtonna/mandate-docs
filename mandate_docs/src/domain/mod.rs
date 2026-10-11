@@ -1,3 +1,3 @@
-pub mod mandate;
+pub mod model;
 pub mod ports;
-pub mod validation;
+pub mod usecases;

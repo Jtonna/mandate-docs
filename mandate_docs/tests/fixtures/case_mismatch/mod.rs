@@ -5,16 +5,14 @@ const MANDATE: &str = include_str!("mandate.yaml");
 #[test]
 fn fails_when_only_the_case_differs() {
     let mandate = parse(MANDATE);
-    let vm = FakeVirtualMachine::with_every_file_in(&mandate).rename(
-        "docs/sop/handling-mandates.md",
-        "docs/sop/Handling-Mandates.md",
-    );
+    let vm = FakeVirtualMachine::with_every_file_in(&mandate)
+        .rename("docs/sop/adding-a-task.md", "docs/sop/Adding-A-Task.md");
 
     let lines = check(&mandate, &vm);
 
     assert_fails(
         lines,
-        &["governed document not found: docs/sop/handling-mandates.md"],
+        &["governed document not found: docs/sop/adding-a-task.md"],
     );
 }
 

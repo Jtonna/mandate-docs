@@ -7,10 +7,17 @@ mod support;
 
 mod all_links_present;
 mod case_mismatch;
+mod cli_run;
 mod code_missing;
 mod doc_missing;
 mod duplicate_rule;
 mod no_rules;
+mod run_all;
+mod run_from_subdirectory;
+mod run_named;
+mod run_no_mandate_folder;
+mod run_no_mandates;
+mod run_unknown_name;
 mod ungoverned_doc;
 mod unknown_rule;
 mod unreferenced_rule;
